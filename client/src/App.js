@@ -1,48 +1,45 @@
-import logo from './logo.svg';
-import './App.css';
 import { useEffect, useState } from "react";
+import Login from "./Login";
 
-function App() {
-  const [health, setHealth] = useState(null);
+export default function App() {
+  const [auth, setAuth] = useState(() => {
+    const token = localStorage.getItem("token");
+    const userStr = localStorage.getItem("user");
+    return token && userStr ? { token, user: JSON.parse(userStr) } : null;
+  });
 
   useEffect(() => {
-    fetch("/health")
-      .then((r) => r.json())
-      .then(setHealth)
-      .catch((e) => setHealth({ ok: false, error: String(e) }));
+    // opciono: proveri da server radi
+    fetch("/health").catch(() => {});
   }, []);
 
-  useEffect(() => {
-  fetch("/api/laps?session_key=9161&driver_number=63&lap_number=8")
-    .then((r) => r.json())
-    .then((data) => console.log("laps:", data))
-    .catch((e) => console.error(e));
-}, []);
+  if (!auth) {
+    return <Login onLoggedIn={setAuth} />;
+  }
 
   return (
     <div style={{ padding: 24 }}>
       <h1>F1PS</h1>
-      <pre>{JSON.stringify(health, null, 2)}</pre>
+      <p>Logged in as: <b>{auth.user.email}</b></p>
+
+      <button
+        onClick={() => {
+          localStorage.removeItem("token");
+          localStorage.removeItem("user");
+          setAuth(null);
+        }}
+      >
+        Logout
+      </button>
+
+      <hr style={{ margin: "24px 0" }} />
+
+      <h2>OpenF1 test</h2>
+      <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
+          <button onClick={() => alert("Results - soon")}>Results</button>
+          <button onClick={() => alert("Teams - soon")}>Teams</button>
+          <button onClick={() => alert("Real time - soon")}>Real time</button>
+      </div>
     </div>
   );
-  /*return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
-  );*/
 }
-
-export default App;

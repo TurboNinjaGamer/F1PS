@@ -1,3 +1,8 @@
+require("dotenv").config();
+const crypto = require("crypto");
+const jwt = require("jsonwebtoken");
+const db = require("./db");
+
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
@@ -8,6 +13,115 @@ app.use(express.json());
 
 app.get("/health", (req, res) => {
   res.json({ ok: true, message: "Server is running" });
+});
+
+function hashCode(email, code) {
+  // vezujemo hash za email da ne može isti kod da se koristi za drugi email
+  return crypto.createHash("sha256").update(`${email}:${code}`).digest("hex");
+}
+
+function makeCode() {
+  // 6-cifreni kod
+  return String(crypto.randomInt(0, 1000000)).padStart(6, "0");
+}
+
+app.post("/auth/request-code", async (req, res) => {
+  try {
+    const emailRaw = req.body?.email || "";
+    const email = String(emailRaw).trim().toLowerCase();
+
+    if (!email || !email.includes("@")) {
+      return res.status(400).json({ error: "Invalid email" });
+    }
+
+    const code = makeCode();
+    const codeHash = hashCode(email, code);
+
+    const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 min
+
+    await db.execute(
+      "INSERT INTO login_codes (email, code_hash, expires_at) VALUES (?, ?, ?)",
+      [email, codeHash, expires]
+    );
+
+    // ZA SADA: samo ispiši kod u konzoli (demo)
+    // Kasnije: pošalji mail preko SMTP (Nodemailer)
+    console.log(`LOGIN CODE for ${email}: ${code}`);
+
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: "Server error", details: e.message });
+  }
+});
+
+app.post("/auth/verify-code", async (req, res) => {
+  try {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const code = String(req.body?.code || "").trim();
+
+    if (!email || !code || code.length !== 6) {
+      return res.status(400).json({ error: "Invalid email or code" });
+    }
+
+    const codeHash = hashCode(email, code);
+
+    const [rows] = await db.execute(
+      `
+      SELECT id, expires_at, used_at
+      FROM login_codes
+      WHERE email = ? AND code_hash = ?
+      ORDER BY id DESC
+      LIMIT 1
+      `,
+      [email, codeHash]
+    );
+
+    if (rows.length === 0) {
+      return res.status(401).json({ error: "Wrong code" });
+    }
+
+    const record = rows[0];
+    if (record.used_at) {
+      return res.status(401).json({ error: "Code already used" });
+    }
+
+    const expiresAt = new Date(record.expires_at).getTime();
+    if (Date.now() > expiresAt) {
+      return res.status(401).json({ error: "Code expired" });
+    }
+
+    // označi kao iskorišćen
+    await db.execute("UPDATE login_codes SET used_at = NOW() WHERE id = ?", [
+      record.id,
+    ]);
+
+    // kreiraj user-a ako ne postoji
+    const [existing] = await db.execute(
+      "SELECT id, email, favorite_team_id FROM users WHERE email = ? LIMIT 1",
+      [email]
+    );
+
+    let user;
+    if (existing.length === 0) {
+      const [ins] = await db.execute(
+        "INSERT INTO users (email) VALUES (?)",
+        [email]
+      );
+      user = { id: ins.insertId, email, favorite_team_id: null };
+    } else {
+      user = existing[0];
+    }
+
+    const token = jwt.sign(
+      { userId: user.id, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    res.json({ ok: true, token, user });
+  } catch (e) {
+    res.status(500).json({ error: "Server error", details: e.message });
+  }
 });
 
 // Proxy ka OpenF1 (primer: lapovi)

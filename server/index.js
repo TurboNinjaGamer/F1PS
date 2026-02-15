@@ -206,3 +206,58 @@ app.put("/me/favorite-team", requireAuth, async (req, res) => {
     res.status(500).json({ error: "Server error", details: e.message });
   }
 });
+
+
+
+
+
+
+
+
+app.get("/results/standings", async (req, res) => {
+  try {
+    const season = Number(req.query.season || 2026);
+
+    // 1️⃣ Nađi poslednju Race session za tu godinu
+    const sessionsResp = await axios.get("https://api.openf1.org/v1/sessions", {
+      params: {
+        year: season,
+        session_name: "Race"
+      }
+    });
+
+    const sessions = sessionsResp.data;
+
+    if (!sessions.length) {
+      return res.json({ ok: false, error: "No sessions found" });
+    }
+
+    // uzmi poslednju race
+    const lastRace = sessions[sessions.length - 1];
+    const sessionKey = lastRace.session_key;
+
+    // 2️⃣ Drivers championship
+    const driversResp = await axios.get("https://api.openf1.org/v1/championship_drivers", {
+      params: { session_key: sessionKey }
+    });
+
+    // 3️⃣ Teams championship
+    const teamsResp = await axios.get("https://api.openf1.org/v1/championship_teams", {
+      params: { session_key: sessionKey }
+    });
+
+    res.json({
+      ok: true,
+      season,
+      drivers: driversResp.data,
+      teams: teamsResp.data
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      error: "Server error",
+      details: err.message
+    });
+  }
+});

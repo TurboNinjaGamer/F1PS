@@ -11,3 +11,40 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+:root{
+  --primary:#111827;
+  --secondary:#F3F4F6;
+  --accent:#60A5FA;
+
+  --bg:#FFFFFF;
+  --card:#FFFFFF;
+  --text:#111111;
+  --textOnPrimary:#FFFFFF;
+}
+
+body{
+  margin:0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Arial, sans-serif;
+}
+
+button{
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.btn-primary{
+  background: var(--primary);
+  color: var(--textOnPrimary);
+}
+
+.card{
+  background: var(--card);
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 14px;
+}

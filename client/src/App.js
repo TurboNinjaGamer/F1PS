@@ -1,45 +1,40 @@
-import { useEffect, useState } from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./Login";
+import Layout from "./Layout";
+import RequireAuth from "./RequireAuth";
+
+import Results from "./pages/Results";
+import Teams from "./pages/Teams";
+import RealTime from "./pages/RealTime";
+import Profile from "./pages/Profile";
+
+import { useEffect } from "react";
+import { applyThemeByTeamId } from "./theme";
 
 export default function App() {
-  const [auth, setAuth] = useState(() => {
-    const token = localStorage.getItem("token");
-    const userStr = localStorage.getItem("user");
-    return token && userStr ? { token, user: JSON.parse(userStr) } : null;
-  });
-
   useEffect(() => {
-    // opciono: proveri da server radi
-    fetch("/health").catch(() => {});
-  }, []);
-
-  if (!auth) {
-    return <Login onLoggedIn={setAuth} />;
-  }
-
+  const userStr = localStorage.getItem("user");
+  if (!userStr) return;
+  const user = JSON.parse(userStr);
+  applyThemeByTeamId(user.favorite_team_id);
+}, []);
   return (
-    <div style={{ padding: 24 }}>
-      <h1>F1PS</h1>
-      <p>Logged in as: <b>{auth.user.email}</b></p>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<Login onLoggedIn={() => {}} />} />
 
-      <button
-        onClick={() => {
-          localStorage.removeItem("token");
-          localStorage.removeItem("user");
-          setAuth(null);
-        }}
-      >
-        Logout
-      </button>
+        <Route element={<RequireAuth />}>
+          <Route element={<Layout />}>
+            <Route path="/" element={<Navigate to="/results" replace />} />
+            <Route path="/results" element={<Results />} />
+            <Route path="/teams" element={<Teams />} />
+            <Route path="/realtime" element={<RealTime />} />
+            <Route path="/profile" element={<Profile />} />
+          </Route>
+        </Route>
 
-      <hr style={{ margin: "24px 0" }} />
-
-      <h2>OpenF1 test</h2>
-      <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
-          <button onClick={() => alert("Results - soon")}>Results</button>
-          <button onClick={() => alert("Teams - soon")}>Teams</button>
-          <button onClick={() => alert("Real time - soon")}>Real time</button>
-      </div>
-    </div>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }

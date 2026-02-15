@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 export default function Login({ onLoggedIn }) {
+  const navigate = useNavigate();
   const [step, setStep] = useState("email"); // "email" | "code"
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -52,6 +54,7 @@ export default function Login({ onLoggedIn }) {
     } finally {
       setLoading(false);
     }
+    navigate("/");
   }
 
   return (

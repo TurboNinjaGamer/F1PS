@@ -151,3 +151,58 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server listening on http://localhost:${PORT}`);
 });
+
+
+
+
+
+function requireAuth(req, res, next) {
+  const auth = req.headers.authorization || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
+  if (!token) return res.status(401).json({ error: "Missing token" });
+
+  try {
+    req.user = jwt.verify(token, process.env.JWT_SECRET);
+    next();
+  } catch {
+    return res.status(401).json({ error: "Invalid token" });
+  }
+}
+
+app.get("/me", requireAuth, async (req, res) => {
+  try {
+    const [rows] = await db.execute(
+      "SELECT id, email, favorite_team_id FROM users WHERE id = ? LIMIT 1",
+      [req.user.userId]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: "User not found" });
+    res.json({ ok: true, user: rows[0] });
+  } catch (e) {
+    res.status(500).json({ error: "Server error", details: e.message });
+  }
+});
+
+app.put("/me/favorite-team", requireAuth, async (req, res) => {
+  try {
+    const favorite_team_id = req.body?.favorite_team_id ?? null;
+
+    // dozvoli null ili broj
+    if (favorite_team_id !== null && !Number.isInteger(favorite_team_id)) {
+      return res.status(400).json({ error: "favorite_team_id must be int or null" });
+    }
+
+    await db.execute("UPDATE users SET favorite_team_id = ? WHERE id = ?", [
+      favorite_team_id,
+      req.user.userId,
+    ]);
+
+    const [rows] = await db.execute(
+      "SELECT id, email, favorite_team_id FROM users WHERE id = ? LIMIT 1",
+      [req.user.userId]
+    );
+
+    res.json({ ok: true, user: rows[0] });
+  } catch (e) {
+    res.status(500).json({ error: "Server error", details: e.message });
+  }
+});

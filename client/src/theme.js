@@ -29,12 +29,13 @@ export function applyThemeByTeamId(teamId) {
   root.style.setProperty("--secondary", team.secondary);
   root.style.setProperty("--accent", team.accent || team.secondary);
 
-  // background + text: stabilno čitljivo
-  root.style.setProperty("--bg", team.secondary === "#FFFFFF" ? "#FFFFFF" : "#0B0B0B");
+  // Background koristi secondary boju ali posvetljenu
+  root.style.setProperty("--bg", team.secondary);
+
   const textOnPrimary = isLight(team.primary) ? "#111111" : "#FFFFFF";
   root.style.setProperty("--textOnPrimary", textOnPrimary);
 
-  // card background
-  root.style.setProperty("--card", "#FFFFFF");
-  root.style.setProperty("--text", "#111111");
+  // Kartice blago svetlije ili tamnije u odnosu na secondary
+  root.style.setProperty("--card", "#ffffff");
+  root.style.setProperty("--text", isLight(team.secondary) ? "#111111" : "#FFFFFF");
 }

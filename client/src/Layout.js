@@ -10,23 +10,26 @@ export default function Layout() {
   }
 
   const linkStyle = ({ isActive }) => ({
-    padding: "10px 12px",
-    borderRadius: 8,
+    padding: "8px 12px",
+    borderRadius: 10,
     textDecoration: "none",
-    color: "black",
-    background: isActive ? "#eaeaea" : "transparent",
+    fontWeight: 600,
+    background: isActive ? "rgba(255,255,255,0.92)" : "transparent",
+color: isActive ? "var(--primary)" : "var(--textOnPrimary)",
   });
 
   return (
     <div>
       <header
         style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: 16,
-          borderBottom: "1px solid #ddd",
-        }}
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: 16,
+        background: "var(--primary)",
+        color: "var(--textOnPrimary)",
+        borderBottom: "1px solid rgba(255,255,255,0.15)",
+      }}
       >
         <div style={{ fontWeight: 700 }}>F1PS</div>
 
@@ -37,10 +40,21 @@ export default function Layout() {
           <NavLink to="/profile" style={linkStyle}>Profile</NavLink>
         </nav>
 
-        <button onClick={logout}>Logout</button>
+        <button
+          onClick={logout}
+          style={{
+              background: "rgba(255,255,255,0.92)",
+              color: "var(--primary)",
+              fontWeight: 700,
+              borderRadius: 10,
+              padding: "8px 12px",
+           }}
+        >
+            Logout
+        </button>
       </header>
 
-      <main style={{ padding: 16 }}>
+      <main style={{ padding: 16, minHeight: "calc(100vh - 66px)", background: "var(--bg)" }}>
         <Outlet />
       </main>
     </div>

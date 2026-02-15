@@ -45,21 +45,21 @@ export default function Profile() {
 
   return (
     <div style={{ maxWidth: 520 }}>
-      <h2>Profil</h2>
+      <h2>Profile</h2>
 
-      {!user && <p>Učitavam...</p>}
+      {!user && <p>Loading...</p>}
 
       {user && (
         <>
           <p>Email: <b>{user.email}</b></p>
 
-          <label>Omiljeni tim</label>
+          <label>Favorite team</label>
           <select
             value={favorite}
             onChange={(e) => setFavorite(e.target.value)}
             style={{ display: "block", marginTop: 6, padding: 10, width: "100%" }}
           >
-            <option value="">(nije izabrano)</option>
+            <option value="">(No option selected)</option>
             {TEAMS.map((t) => (
               <option key={t.id} value={String(t.id)}>
                 {t.name}

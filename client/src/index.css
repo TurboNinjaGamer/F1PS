@@ -44,7 +44,21 @@ button{
 
 .card{
   background: var(--card);
-  border: 1px solid #e5e7eb;
+  border: 1px solid rgba(255,255,255,0.10);
   border-radius: 14px;
   padding: 14px;
+}
+
+input, select{
+  background: rgba(255,255,255,0.92);
+  color: #111111;
+  border: 1px solid rgba(0,0,0,0.15);
+  border-radius: 10px;
+  padding: 10px;
+  outline: none;
+}
+
+select option{
+  color: #111111;
+  background: #ffffff;
 }

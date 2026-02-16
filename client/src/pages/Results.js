@@ -76,11 +76,15 @@ export default function Results() {
     return t?.name || null;
   }, [favoriteTeamId]);
 
+  const favoriteTeam = useMemo(() => {
+  return TEAMS.find((x) => x.id === favoriteTeamId) || null;
+}, [favoriteTeamId]);
+
   useEffect(() => {
     setData(null);
     setErr("");
 
-    authFetch(`/results/standings?season=${season}&limit=3`)
+    authFetch(`/results/standings?season=${season}&limit=15`)
       .then((r) => r.json())
       .then((j) => {
         if (!j.ok) {
@@ -93,7 +97,7 @@ export default function Results() {
   }, [season]);
 
   return (
-    <div>
+    <div style={{"--table-accent": favoriteTeam?.primary || "#e10600"}}>
       <h2>Results</h2>
 
       <div style={{ marginBottom: 20 }}>
@@ -110,13 +114,15 @@ export default function Results() {
 
       {data && (
         <>
-        <div style={{overflowX: "auto"}}>
-          {/* Drivers */}
-          <h3>Drivers Championship</h3>
-          <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
-            <thead>
+        <div className="resultsGrid">
+
+          <div style={{overflowX: "auto"}}>
+            {/* Drivers */}
+              <h3>Drivers Championship</h3>
+              <table className="standingsTable" style={{ width: "30%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+              <thead>
               <tr>
-                <th style={{...thStyle, width: 0}}>Pos</th>
+                <th style={{...thStyle, width: 20}}>Pos</th>
                 <th style={{...thStyle, width: 100}}>Driver</th>
                 <th style={{...thStyle, width: 60, textAlign: "right"}}>Points</th>
                 {data.races?.map((r) => (
@@ -135,7 +141,7 @@ export default function Results() {
                 .sort((a, b) => a.position_current - b.position_current)
                 .map((d) => (
                   <tr key={d.driver_number}>
-                    <td style={{...tdStyle, width: 0}}>{d.position_current}</td>
+                    <td style={{...tdStyle, width: 20}}>{d.position_current}</td>
                     <td style={{...tdStyle, width: 100}}>{getDriverName(d.driver_number)}</td>
                     <td style={{...tdStyle, width: 60, textAlign: "right"}}>{d.points_current}</td>
                     {data.races?.map((r) => {
@@ -150,14 +156,16 @@ export default function Results() {
                 ))}
             </tbody>
           </table>
+        </div>
 
           {/* Teams */}
+          <div style={{overflowX: "auto"}}>
           <h3 style={{ marginTop: 30 }}>Teams Championship</h3>
-          <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+          <table className="standingsTable" style={{ width: "20%", borderCollapse: "collapse", tableLayout: "fixed" }}>
             <thead>
               <tr>
                 <th style={{...thStyle, width: 0}}>Pos</th>
-                <th style={{...thStyle, width: 100}}>Team</th>
+                <th style={{...thStyle, width: 60}}>Team</th>
                 <th style={{...thStyle, width: 60, textAlign: "right"}}>Points</th>
               </tr>
             </thead>
@@ -178,13 +186,14 @@ export default function Results() {
                       }}
                     >
                       <td style={{...tdStyle, width: 0}}>{t.position_current}</td>
-                      <td style={{...tdStyle, width: 100}}>{t.team_name}</td>
+                      <td style={{...tdStyle, width: 60}}>{t.team_name}</td>
                       <td style={{...tdStyle, width: 60, textAlign: "right"}}>{t.points_current}</td>
                     </tr>
                   );
                 })}
             </tbody>
           </table>
+        </div>
           </div>
         </>
       )}

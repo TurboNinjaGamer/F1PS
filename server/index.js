@@ -7,6 +7,37 @@ const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
 
+
+
+const standingsCache = new Map();
+const standingsInFlight = new Map();
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 min (povećaj, manje udaraš API)
+
+// rate limit: max 3 req/sec => ~350ms razmak
+let lastOpenF1CallAt = 0;
+const MIN_GAP_MS = 350;
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function openf1Get(url, config) {
+  // obezbedi razmak između poziva
+  const now = Date.now();
+  const wait = Math.max(0, MIN_GAP_MS - (now - lastOpenF1CallAt));
+  if (wait) await sleep(wait);
+  lastOpenF1CallAt = Date.now();
+
+  try {
+    return await axios.get(url, config);
+  } catch (err) {
+    // retry na 429
+    if (err.response?.status === 429) {
+      await sleep(1200);
+      return await axios.get(url, config);
+    }
+    throw err;
+  }
+}
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -215,49 +246,164 @@ app.put("/me/favorite-team", requireAuth, async (req, res) => {
 
 
 app.get("/results/standings", async (req, res) => {
+  const season = Number(req.query.season || 2026);
+  const limit = Math.min(Number(req.query.limit || 10), 24); // max 24
+
+  const cacheKey = `${season}:${limit}`;
+
   try {
-    const season = Number(req.query.season || 2026);
-
-    // 1️⃣ Nađi poslednju Race session za tu godinu
-    const sessionsResp = await axios.get("https://api.openf1.org/v1/sessions", {
-      params: {
-        year: season,
-        session_name: "Race"
-      }
-    });
-
-    const sessions = sessionsResp.data;
-
-    if (!sessions.length) {
-      return res.json({ ok: false, error: "No sessions found" });
+    // 0) Cache hit
+    const cached = standingsCache.get(cacheKey);
+    if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+      return res.json(cached.data);
     }
 
-    // uzmi poslednju race
-    const lastRace = sessions[sessions.length - 1];
-    const sessionKey = lastRace.session_key;
+    // 0.5) In-flight dedup (ako je isti upit već u toku, sačekaj)
+    if (standingsInFlight.has(cacheKey)) {
+      const data = await standingsInFlight.get(cacheKey);
+      return res.json(data);
+    }
 
-    // 2️⃣ Drivers championship
-    const driversResp = await axios.get("https://api.openf1.org/v1/championship_drivers", {
-      params: { session_key: sessionKey }
-    });
+    // 1) Work promise (sve ide unutra)
+    const workPromise = (async () => {
+      // 1) Nađi sve Race sesije za sezonu
+      const sessionsResp = await openf1Get("https://api.openf1.org/v1/sessions", {
+        params: { year: season, session_name: "Race" },
+      });
 
-    // 3️⃣ Teams championship
-    const teamsResp = await axios.get("https://api.openf1.org/v1/championship_teams", {
-      params: { session_key: sessionKey }
-    });
+      let sessions = sessionsResp.data || [];
+      if (!sessions.length) {
+        return { ok: false, error: "No sessions found" };
+      }
 
-    res.json({
-      ok: true,
-      season,
-      drivers: driversResp.data,
-      teams: teamsResp.data
-    });
+      // Sort po datumu
+      sessions = sessions.sort((a, b) => {
+        const da = new Date(a.date_start || 0).getTime();
+        const db = new Date(b.date_start || 0).getTime();
+        return da - db;
+      });
 
+      const lastRace = sessions[sessions.length - 1];
+      const lastSessionKey = lastRace.session_key;
+
+      // Poslednjih N trka
+      const races = sessions.slice(-limit).map((s) => ({
+        session_key: s.session_key,
+        meeting_key: s.meeting_key,
+        code: null,
+      }));
+
+      // 2) Championship (koristi poslednju trku)
+      const driversResp = await openf1Get("https://api.openf1.org/v1/championship_drivers", {
+        params: { session_key: lastSessionKey },
+      });
+
+      const teamsResp = await openf1Get("https://api.openf1.org/v1/championship_teams", {
+        params: { session_key: lastSessionKey },
+      });
+
+      // 3) Meetings map (meeting_key -> name)
+      let meetingMap = {};
+      const meetingsResp = await openf1Get("https://api.openf1.org/v1/meetings", {
+        params: { year: season },
+      });
+
+      for (const m of meetingsResp.data || []) {
+        meetingMap[m.meeting_key] = m.meeting_name || m.meeting_official_name || "";
+      }
+
+      function makeCode(name) {
+        if (!name) return "RACE";
+        const cleaned = name
+          .replace(/Grand Prix/gi, "")
+          .replace(/FORMULA 1/gi, "")
+          .trim();
+
+        const words = cleaned.split(/\s+/).filter(Boolean);
+
+        // npr "Abu Dhabi" => AD, "Las Vegas" => LV
+        if (words.length === 1) return words[0].slice(0, 3).toUpperCase();
+        if (words.length === 2) return (words[0][0] + words[1][0]).toUpperCase();
+
+        // 3+ reči -> prva slova prve 3
+        const code = words.slice(0, 3).map((w) => w[0]).join("").toUpperCase();
+        return code || cleaned.slice(0, 3).toUpperCase();
+      }
+
+      for (const r of races) {
+        const name = meetingMap[r.meeting_key] || "";
+        r.code = makeCode(name);
+      }
+
+      // 4) Session results za svaku trku (sekvencijalno, rate-limit radi globalno)
+      const raceResults = [];
+      for (const r of races) {
+        const rr = await openf1Get("https://api.openf1.org/v1/session_result", {
+          params: { session_key: r.session_key },
+        });
+        raceResults.push({ session_key: r.session_key, rows: rr.data || [] });
+      }
+
+      // driver_number -> { session_key: position }
+      const driverRacePositions = {};
+      for (const race of raceResults) {
+        for (const row of race.rows) {
+          const dn = String(row.driver_number);
+          if (!driverRacePositions[dn]) driverRacePositions[dn] = {};
+
+          const pos =
+            row.position ??
+            row.position_order ??
+            row.position_finish ??
+            row.classified_position ??
+            null;
+
+          if (pos != null) {
+            driverRacePositions[dn][race.session_key] = Number(pos);
+          }
+        }
+      }
+
+      return {
+        ok: true,
+        season,
+        last_session_key: lastSessionKey,
+        drivers: driversResp.data,
+        teams: teamsResp.data,
+        races, // [{session_key, meeting_key, code}]
+        driverRacePositions,
+      };
+    })();
+
+    // stavi in-flight pre await
+    standingsInFlight.set(cacheKey, workPromise);
+
+    // sačekaj rezultat
+    const payload = await workPromise;
+
+    // snimi u cache samo ako je ok
+    if (payload?.ok) {
+      standingsCache.set(cacheKey, { ts: Date.now(), data: payload });
+    }
+
+    return res.json(payload);
   } catch (err) {
-    res.status(500).json({
+    console.error("==== STANDINGS ERROR ====");
+    console.error("Message:", err.message);
+
+    if (err.response) {
+      console.error("Status:", err.response.status);
+      console.error("Data:", err.response.data);
+    }
+
+    console.error("Stack:", err.stack);
+
+    return res.status(500).json({
       ok: false,
       error: "Server error",
-      details: err.message
+      details: err.message,
     });
+  } finally {
+    standingsInFlight.delete(cacheKey);
   }
 });

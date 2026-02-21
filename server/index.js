@@ -407,3 +407,41 @@ app.get("/results/standings", async (req, res) => {
     standingsInFlight.delete(cacheKey);
   }
 });
+
+
+
+
+const TEAMS_2026 = require("./teams2026");
+
+app.get("/teams/drivers", async (req, res) => {
+  try {
+    // Teams stranica je fiksirana na 2026 u clientu,
+    // ali ruta može da služi kao “preview data endpoint”.
+    const season = 2026;
+
+    const cacheKey = "teamsDrivers:2026";
+    const cached = standingsCache.get(cacheKey);
+    if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+      return res.json(cached.data);
+    }
+
+    const payload = {
+      ok: true,
+      season,
+      mode: "preview",
+      teams: TEAMS_2026,
+      drivers: [], // vozače za 2026 držiš u client/src/drivers2026.js
+    };
+
+    standingsCache.set(cacheKey, { ts: Date.now(), data: payload });
+    return res.json(payload);
+  } catch (err) {
+    console.error("==== TEAMS/DRIVERS ERROR ====");
+    console.error(err.message);
+    return res.status(500).json({
+      ok: false,
+      error: "Server error",
+      details: err.message,
+    });
+  }
+});

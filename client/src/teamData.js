@@ -1,5 +1,5 @@
 export const TEAMS = [
-  { id: 1, name: "McLaren", primary: "#FF7A00", secondary: "#0B0B0B", accent: "#FFFFFF" },
+  { id: 1, name: "McLaren", primary: "#FF7A00", secondary: "#211f1f", accent: "#FFFFFF" },
   { id: 2, name: "Mercedes", primary: "#00D2BE", secondary: "#BFC3C7", accent: "#0B0B0B" },
   { id: 3, name: "Red Bull", primary: "#071c54", secondary: "#FFD100", accent: "#D1001C" },
   { id: 4, name: "Ferrari", primary: "#D40000", secondary: "#FFFFFF", accent: "#111111" },

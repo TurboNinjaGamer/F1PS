@@ -142,6 +142,10 @@ export default function Teams() {
                       <img
                         src={d.headshot_url}
                         alt={d.full_name || "Driver"}
+                        loading="lazy"
+                        onError={(e) => {
+                          e.currentTarget.src = "/heads/default.png";
+                        }}
                         style={{
                           width: isFav ? 54 : 48,
                           height: isFav ? 54 : 48,
@@ -149,19 +153,21 @@ export default function Teams() {
                           objectFit: "cover",
                           background: "#eee",
                           flexShrink: 0,
-                        }}
-                        onError={(e) => {
-                          e.currentTarget.style.display = "none";
+                          border: `2px solid ${g.teamColor}`
                         }}
                       />
                     ) : (
-                      <div
+                      <img
+                        src="/heads/default.png"
+                        alt="Driver"
                         style={{
                           width: isFav ? 54 : 48,
                           height: isFav ? 54 : 48,
                           borderRadius: "50%",
+                          objectFit: "cover",
                           background: "#eee",
                           flexShrink: 0,
+                          border: `2px solid ${g.teamColor}`
                         }}
                       />
                     )}

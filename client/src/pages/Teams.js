@@ -231,7 +231,7 @@ export default function Teams() {
 
   return (
     <div style={{ padding: "16px 18px" }}>
-      <h2>Teams 2026</h2>
+      
 
       {/* FAVORITE TEAM kao zaseban red */}
       {favoriteGroup && (

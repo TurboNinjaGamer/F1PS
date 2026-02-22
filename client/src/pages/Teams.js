@@ -70,6 +70,13 @@ export default function Teams() {
     return groups.filter((g) => g.teamName?.toLowerCase() !== favLower);
   }, [groups, favoriteTeamName]);
 
+  const Stat = ({ label, value }) => (
+  <div style={{ display: "flex", gap: 6, alignItems: "baseline" }}>
+    <div style={{ fontSize: 11, opacity: 0.65, fontWeight: 800 }}>{label}</div>
+    <div style={{ fontSize: 12, fontWeight: 900 }}>{value ?? "—"}</div>
+  </div>
+  );
+
   const renderDriverCard = (g, d, idx, isFav) => {
     return (
       <div
@@ -131,14 +138,34 @@ export default function Teams() {
           />
         )}
 
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 900, letterSpacing: 0.3, fontSize: isFav ? 16 : 14 }}>
-            {d.name_acronym || d.full_name || "TBD"}
-          </div>
-          <div style={{ fontSize: 13, opacity: 0.8 }}>
-            #{d.driver_number ?? "—"} · {d.full_name || "TBD"}
-          </div>
-        </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+  <div style={{ fontWeight: 900, letterSpacing: 0.3, fontSize: isFav ? 16 : 14 }}>
+    {d.name_acronym || d.full_name || "TBD"}
+  </div>
+
+  <div style={{ fontSize: 13, opacity: 0.8, marginBottom: isFav ? 8 : 0 }}>
+    #{d.driver_number ?? "—"} · {d.full_name || "TBD"}
+  </div>
+
+  {/* ✅ BIO/STATS samo za favorite */}
+  {isFav && d.bio && (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        gap: "10px 16px",
+        alignItems: "center",
+      }}
+    >
+      <Stat label="Born" value={d.bio.born} />
+      <Stat label="Wins" value={d.bio.wins} />
+      <Stat label="Podiums" value={d.bio.podiums} />
+      <Stat label="Titles" value={d.bio.titles} />
+      <Stat label="Best finish" value={d.bio.bestFinish} />
+    </div>
+  )}
+</div>
+
       </div>
     );
   };

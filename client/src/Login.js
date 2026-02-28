@@ -14,7 +14,7 @@ export default function Login({ onLoggedIn }) {
     setMsg("");
     setLoading(true);
     try {
-      const res = await fetch("/auth/request-code", {
+      const res = await fetch("/api/auth/request-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
@@ -36,7 +36,7 @@ export default function Login({ onLoggedIn }) {
     setMsg("");
     setLoading(true);
     try {
-      const res = await fetch("/auth/verify-code", {
+      const res = await fetch("/api/auth/verify-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, code }),

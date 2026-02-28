@@ -86,7 +86,7 @@ export default function Results() {
     setData(null);
     setErr("");
 
-    authFetch(`/results/standings?season=${season}&limit=15`)
+    authFetch(`/api/results/standings?season=${season}&limit=15`)
       .then((r) => r.json())
       .then((j) => {
         if (!j.ok) {

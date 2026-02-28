@@ -9,7 +9,7 @@ export default function Profile() {
   const [msg, setMsg] = useState("");
 
   useEffect(() => {
-    authFetch("/me")
+    authFetch("/api/me")
       .then((r) => r.json())
       .then((data) => {
         if (data.ok) {
@@ -26,7 +26,7 @@ export default function Profile() {
     setMsg("");
     const favorite_team_id = favorite ? Number(favorite) : null;
 
-    const res = await authFetch("/me/favorite-team", {
+    const res = await authFetch("/api/me/favorite-team", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ favorite_team_id }),

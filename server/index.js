@@ -42,7 +42,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.get("/health", (req, res) => {
+const router = express.Router();
+app.use("/api", router);
+
+router.get("/health", (req, res) => {
   res.json({ ok: true, message: "Server is running" });
 });
 
@@ -56,7 +59,7 @@ function makeCode() {
   return String(crypto.randomInt(0, 1000000)).padStart(6, "0");
 }
 
-app.post("/auth/request-code", async (req, res) => {
+router.post("/auth/request-code", async (req, res) => {
   try {
     const emailRaw = req.body?.email || "";
     const email = String(emailRaw).trim().toLowerCase();
@@ -85,7 +88,7 @@ app.post("/auth/request-code", async (req, res) => {
   }
 });
 
-app.post("/auth/verify-code", async (req, res) => {
+router.post("/auth/verify-code", async (req, res) => {
   try {
     const email = String(req.body?.email || "").trim().toLowerCase();
     const code = String(req.body?.code || "").trim();
@@ -156,7 +159,7 @@ app.post("/auth/verify-code", async (req, res) => {
 });
 
 // Proxy ka OpenF1 (primer: lapovi)
-app.get("/api/laps", async (req, res) => {
+router.get("/api/laps", async (req, res) => {
   try {
     const { session_key, driver_number, lap_number } = req.query;
 
@@ -177,6 +180,8 @@ app.get("/api/laps", async (req, res) => {
     });
   }
 });
+
+
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
@@ -200,7 +205,7 @@ function requireAuth(req, res, next) {
   }
 }
 
-app.get("/me", requireAuth, async (req, res) => {
+router.get("/me", requireAuth, async (req, res) => {
   try {
     const [rows] = await db.execute(
       "SELECT id, email, favorite_team_id FROM users WHERE id = ? LIMIT 1",
@@ -213,7 +218,7 @@ app.get("/me", requireAuth, async (req, res) => {
   }
 });
 
-app.put("/me/favorite-team", requireAuth, async (req, res) => {
+router.put("/me/favorite-team", requireAuth, async (req, res) => {
   try {
     const favorite_team_id = req.body?.favorite_team_id ?? null;
 
@@ -245,7 +250,7 @@ app.put("/me/favorite-team", requireAuth, async (req, res) => {
 
 
 
-app.get("/results/standings", async (req, res) => {
+router.get("/results/standings", async (req, res) => {
   const season = Number(req.query.season || 2026);
   const limit = Math.min(Number(req.query.limit || 10), 24); // max 24
 
@@ -413,7 +418,7 @@ app.get("/results/standings", async (req, res) => {
 
 const TEAMS_2026 = require("./teams2026");
 
-app.get("/teams/drivers", async (req, res) => {
+router.get("/teams/drivers", async (req, res) => {
   try {
     // Teams stranica je fiksirana na 2026 u clientu,
     // ali ruta može da služi kao “preview data endpoint”.

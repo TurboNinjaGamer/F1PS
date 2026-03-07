@@ -29,3 +29,42 @@ CREATE TABLE IF NOT EXISTS `login_codes` (
   KEY `idx_email` (`email`),
   KEY `idx_expires` (`expires_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE IF NOT EXISTS `season_driver_standings` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `season` int(11) NOT NULL,
+  `driver_number` int(11) NOT NULL,
+  `driver_name` varchar(100) NOT NULL,
+  `team_name` varchar(100) NOT NULL,
+  `position_current` int(11) NOT NULL,
+  `points_current` decimal(10,2) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_season_driver` (`season`, `driver_number`),
+  KEY `idx_driver_season` (`season`),
+  KEY `idx_driver_team` (`team_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE IF NOT EXISTS `season_team_standings` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `season` int(11) NOT NULL,
+  `team_name` varchar(100) NOT NULL,
+  `position_current` int(11) NOT NULL,
+  `points_current` decimal(10,2) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_season_team` (`season`, `team_name`),
+  KEY `idx_team_season` (`season`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE IF NOT EXISTS `season_race_results` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `season` int(11) NOT NULL,
+  `session_key` int(11) NOT NULL,
+  `race_code` varchar(10) NOT NULL,
+  `driver_number` int(11) NOT NULL,
+  `position_finish` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_season_race_driver` (`season`, `session_key`, `driver_number`),
+  KEY `idx_race_season` (`season`),
+  KEY `idx_race_driver` (`driver_number`),
+  KEY `idx_race_code` (`race_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

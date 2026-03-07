@@ -23,7 +23,7 @@ export default function Login({ onLoggedIn }) {
       if (!res.ok) throw new Error(data?.error || "Request failed");
       setStep("code");
       setCode("")
-      setMsg("Kod je poslat (za sada se ispisuje u server konzoli).");
+      setMsg("Kod je poslat na vašu e-poštu.");
     } catch (err) {
       setMsg(err.message);
     } finally {

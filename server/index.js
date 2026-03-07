@@ -2,6 +2,7 @@ require("dotenv").config();
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const db = require("./db");
+const { sendLoginCode } = require("./mailer");
 
 const express = require("express");
 const cors = require("cors");
@@ -80,7 +81,7 @@ router.post("/auth/request-code", async (req, res) => {
 
     // ZA SADA: samo ispiši kod u konzoli (demo)
     // Kasnije: pošalji mail preko SMTP (Nodemailer)
-    console.log(`LOGIN CODE for ${email}: ${code}`);
+    await sendLoginCode(email, code);
 
     res.json({ ok: true });
   } catch (e) {

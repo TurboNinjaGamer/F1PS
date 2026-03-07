@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { authFetch } from "../api";
 import { TEAMS } from "../teamData";
+import { CALENDAR_2026 } from "../calendar2026";
 
 const SEASONS = [2026, 2025, 2024, 2023];
 
@@ -114,7 +115,54 @@ export default function Results() {
       {err && <div>{err}</div>}
       {!data && !err && <div>Loading...</div>}
 
-      {data && (
+      {data && data.drivers?.length === 0 && season === 2026 && (
+  <div style={{ marginTop: 20 }}>
+    <h3>2026 Race Calendar</h3>
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+        gap: 12,
+        marginTop: 12,
+      }}
+    >
+      {CALENDAR_2026.map((race) => (
+        <div
+          key={race.round}
+          style={{
+            border: "1px solid rgba(255,255,255,0.15)",
+            borderRadius: 12,
+            background: "#fff",
+            color: "#111",
+            padding: 14,
+            boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+          }}
+        >
+          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>
+            Round {race.round}
+          </div>
+          <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 4 }}>
+            {race.code}
+          </div>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>
+            {race.name}
+          </div>
+          <div style={{ fontSize: 13, opacity: 0.75 }}>
+            {race.date}
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+
+{data && data.drivers?.length === 0 && season !== 2026 && (
+  <div style={{ marginTop: 20, opacity: 0.7 }}>
+    No available results yet for this season 🏁
+  </div>
+)}
+
+{data && data.drivers?.length > 0 && (
         <>
         <div className="resultsGrid">
 

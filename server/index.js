@@ -662,3 +662,48 @@ router.get("/teams/drivers", async (req, res) => {
     });
   }
 });
+
+
+
+
+
+router.get("/realtime/up-next", async (req, res) => {
+  try {
+    const year = Number(req.query.year || new Date().getFullYear());
+
+    const resp = await openf1Get("https://api.openf1.org/v1/meetings", {
+      params: { year },
+    });
+
+    let meetings = resp.data || [];
+
+    meetings = meetings
+      .filter((m) => m.date_start)
+      .sort((a, b) => new Date(a.date_start) - new Date(b.date_start));
+
+    const now = Date.now();
+
+    const nextMeeting =
+      meetings.find((m) => new Date(m.date_start).getTime() > now) || null;
+
+    return res.json({
+      ok: true,
+      year,
+      nextMeeting,
+    });
+  } catch (err) {
+    console.error("==== REALTIME UP NEXT ERROR ====");
+    console.error("Message:", err.message);
+
+    if (err.response) {
+      console.error("Status:", err.response.status);
+      console.error("Data:", err.response.data);
+    }
+
+    return res.status(500).json({
+      ok: false,
+      error: "Server error",
+      details: err.message,
+    });
+  }
+});

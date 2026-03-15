@@ -902,3 +902,62 @@ router.get("/realtime/status", async (req, res) => {
     });
   }
 });
+
+
+
+
+
+
+router.get("/realtime/position-tower", async (req, res) => {
+  try {
+    const live = getOpenF1LatestMessages();
+    const status = getOpenF1LiveStatus();
+
+    const rows = live.position || [];
+
+    // poslednji zapis po vozaču
+    const latestByDriver = new Map();
+
+    for (const row of rows) {
+      const driverNumber = Number(row.driver_number);
+      if (!driverNumber) continue;
+
+      const prev = latestByDriver.get(driverNumber);
+
+      // koristi _id ako postoji, inače date
+      const currentRank = Number(row._id || 0);
+      const prevRank = Number(prev?._id || 0);
+
+      if (!prev || currentRank >= prevRank) {
+        latestByDriver.set(driverNumber, row);
+      }
+    }
+
+    const tower = Array.from(latestByDriver.values())
+      .map((row) => ({
+        driver_number: row.driver_number,
+        position: row.position ?? row.position_order ?? null,
+        date: row.date || null,
+        meeting_key: row.meeting_key || null,
+        session_key: row.session_key || null,
+      }))
+      .filter((row) => row.position != null)
+      .sort((a, b) => Number(a.position) - Number(b.position));
+
+    return res.json({
+      ok: true,
+      connected: status.connected,
+      count: tower.length,
+      tower,
+    });
+  } catch (err) {
+    console.error("==== POSITION TOWER ERROR ====");
+    console.error("Message:", err.message);
+
+    return res.status(500).json({
+      ok: false,
+      error: "Server error",
+      details: err.message,
+    });
+  }
+});

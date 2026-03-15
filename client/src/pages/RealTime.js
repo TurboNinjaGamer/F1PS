@@ -15,6 +15,123 @@ function InfoRow({ label, value }) {
   );
 }
 
+const Driver_Map = {
+  1:"NOR",
+  81:"PIA",
+  63:"RUS",
+  12:"ANT",
+  44:"HAM",
+  16:"LEC",
+  3:"VER",
+  6:"HAD",
+  30:"LAW",
+  41:"LIN",
+  10:"GAS",
+  43:"COL",
+  31:"OCO",
+  87:"BEA",
+  77:"BOT",
+  11:"PER",
+  5:"BOR",
+  27:"HUL",
+  14:"ALO",
+  18:"STR",
+  55:"SAI",
+  23:"ALB"
+};
+
+const [towerData, setTowerData] = useState([]);
+
+
+function getDriverCode(num) {
+  return Driver_Map[num] || `#${num}`;
+}
+
+
+useEffect(() => {
+  if (data?.mode !== "live-session") {
+    setTowerData([]);
+    return;
+  }
+
+  let cancelled = false;
+
+  const loadTower = () => {
+    authFetch("/api/realtime/position-tower")
+      .then((r) => r.json())
+      .then((j) => {
+        if (!cancelled && j.ok) {
+          setTowerData(j.tower || []);
+        }
+      })
+      .catch(() => {});
+  };
+
+  loadTower();
+  const id = setInterval(loadTower, 2000);
+
+  return () => {
+    cancelled = true;
+    clearInterval(id);
+  };
+}, [data?.mode]);
+
+
+function PositionTower({ tower }) {
+  return (
+    <div
+      style={{
+        border: "1px solid rgba(255,255,255,0.15)",
+        borderRadius: 12,
+        padding: 12,
+        background: "#ffffff",
+        color: "#111111",
+        minHeight: 500,
+      }}
+    >
+      <h3 style={{ marginTop: 0 }}>Position Tower</h3>
+
+      {!tower?.length && (
+        <div style={{ opacity: 0.7 }}>No live position data yet.</div>
+      )}
+
+      {!!tower?.length && (
+        <div style={{ display: "grid", gap: 8 }}>
+          {tower.map((row) => (
+            <div
+              key={row.driver_number}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "44px 1fr 60px",
+                alignItems: "center",
+                gap: 10,
+                padding: "10px 12px",
+                borderRadius: 10,
+                background: "#f5f5f5",
+                border: "1px solid rgba(0,0,0,0.06)",
+              }}
+            >
+              <div style={{ fontWeight: 900, fontSize: 18 }}>
+                {row.position}
+              </div>
+
+              <div style={{ fontWeight: 800 }}>
+                {getDriverCode(row.driver_number)}
+              </div>
+
+              <div style={{ textAlign: "right", opacity: 0.75 }}>
+                #{row.driver_number}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+
 export default function RealTime() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
@@ -391,18 +508,7 @@ export default function RealTime() {
             marginTop: 20,
           }}
         >
-          <div
-            style={{
-              border: "1px solid rgba(255,255,255,0.15)",
-              borderRadius: 12,
-              padding: 12,
-              background: "#ffffff",
-              color: "#111111",
-              minHeight: 500,
-            }}
-          >
-            <h3>Position Tower</h3>
-          </div>
+          <PositionTower tower = {towerData}></PositionTower>
 
           <div
             style={{

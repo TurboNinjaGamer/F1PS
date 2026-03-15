@@ -961,3 +961,101 @@ router.get("/realtime/position-tower", async (req, res) => {
     });
   }
 });
+
+
+
+
+
+router.get("/realtime/test-tower", async (req, res) => {
+  try {
+    const sessionKey = Number(req.query.session_key);
+
+    if (!sessionKey) {
+      return res.status(400).json({
+        ok: false,
+        error: "session_key required",
+      });
+    }
+
+    const resp = await openf1Get(
+      "https://api.openf1.org/v1/position",
+      {
+        params: { session_key: sessionKey },
+      }
+    );
+
+    const rows = resp.data || [];
+
+    const latestByDriver = new Map();
+
+    for (const row of rows) {
+      const dn = Number(row.driver_number);
+      if (!dn) continue;
+
+      const prev = latestByDriver.get(dn);
+
+      const currentTime = new Date(row.date).getTime();
+      const prevTime = prev ? new Date(prev.date).getTime() : 0;
+
+      if (!prev || currentTime > prevTime) {
+        latestByDriver.set(dn, row);
+      }
+    }
+
+    const tower = Array.from(latestByDriver.values())
+      .map((r) => ({
+        driver_number: r.driver_number,
+        position: r.position,
+      }))
+      .filter((r) => r.position != null)
+      .sort((a, b) => a.position - b.position);
+
+    res.json({
+      ok: true,
+      count: tower.length,
+      tower,
+    });
+  } catch (err) {
+    console.error(err);
+
+    res.status(500).json({
+      ok: false,
+      error: err.message,
+    });
+  }
+});
+
+
+
+
+
+
+router.get("/realtime/test-tower-replay", async (req, res) => {
+  try {
+    const sessionKey = Number(req.query.session_key);
+
+    if (!sessionKey) {
+      return res.status(400).json({
+        ok: false,
+        error: "session_key required",
+      });
+    }
+
+    const resp = await openf1Get("https://api.openf1.org/v1/position", {
+      params: { session_key: sessionKey },
+    });
+
+    return res.json({
+      ok: true,
+      session_key: sessionKey,
+      rows: resp.data || [],
+    });
+  } catch (err) {
+    console.error("[TEST TOWER REPLAY ERROR]", err.message);
+
+    return res.status(500).json({
+      ok: false,
+      error: err.message,
+    });
+  }
+});

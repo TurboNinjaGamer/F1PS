@@ -16,68 +16,165 @@ function InfoRow({ label, value }) {
 }
 
 const Driver_Map = {
-  1:"NOR",
-  81:"PIA",
-  63:"RUS",
-  12:"ANT",
-  44:"HAM",
-  16:"LEC",
-  3:"VER",
-  6:"HAD",
-  30:"LAW",
-  41:"LIN",
-  10:"GAS",
-  43:"COL",
-  31:"OCO",
-  87:"BEA",
-  77:"BOT",
-  11:"PER",
-  5:"BOR",
-  27:"HUL",
-  14:"ALO",
-  18:"STR",
-  55:"SAI",
-  23:"ALB"
+  1: "NOR",
+  81: "PIA",
+  63: "RUS",
+  12: "ANT",
+  44: "HAM",
+  16: "LEC",
+  3: "VER",
+  6: "HAD",
+  30: "LAW",
+  41: "LIN",
+  10: "GAS",
+  43: "COL",
+  31: "OCO",
+  87: "BEA",
+  77: "BOT",
+  11: "PER",
+  5: "BOR",
+  27: "HUL",
+  14: "ALO",
+  18: "STR",
+  55: "SAI",
+  23: "ALB",
 };
-
-const [towerData, setTowerData] = useState([]);
-
 
 function getDriverCode(num) {
   return Driver_Map[num] || `#${num}`;
 }
 
 
-useEffect(() => {
-  if (data?.mode !== "live-session") {
-    setTowerData([]);
-    return;
+
+
+
+
+
+function buildReplayFrames(rows) {
+  if (!rows?.length) return [];
+
+  const sorted = [...rows].sort(
+    (a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime()
+  );
+
+  const frameMap = new Map();
+
+  for (const row of sorted) {
+    const key = row.date;
+    if (!key) continue;
+
+    if (!frameMap.has(key)) {
+      frameMap.set(key, []);
+    }
+    frameMap.get(key).push(row);
   }
 
-  let cancelled = false;
+  const timestamps = Array.from(frameMap.keys()).sort(
+    (a, b) => new Date(a).getTime() - new Date(b).getTime()
+  );
 
-  const loadTower = () => {
-    authFetch("/api/realtime/position-tower")
-      .then((r) => r.json())
-      .then((j) => {
-        if (!cancelled && j.ok) {
-          setTowerData(j.tower || []);
-        }
-      })
-      .catch(() => {});
-  };
+  const latestByDriver = new Map();
+  const frames = [];
 
-  loadTower();
-  const id = setInterval(loadTower, 2000);
+  for (const ts of timestamps) {
+    const updates = frameMap.get(ts) || [];
 
-  return () => {
-    cancelled = true;
-    clearInterval(id);
-  };
-}, [data?.mode]);
+    for (const row of updates) {
+      const driverNumber = Number(row.driver_number);
+      const position = Number(row.position ?? row.position_order ?? 0);
+
+      if (!driverNumber || !position) continue;
+
+      latestByDriver.set(driverNumber, {
+        driver_number: driverNumber,
+        position,
+      });
+    }
+
+    const tower = Array.from(latestByDriver.values())
+      .sort((a, b) => a.position - b.position);
+
+    if (tower.length > 0) {
+      frames.push({
+        date: ts,
+        tower,
+      });
+    }
+  }
+
+  return frames;
+}
 
 
-function PositionTower({ tower }) {
+
+function PositionTower({ tower, frameDate }) {
+  return (
+    <div
+      style={{
+        border: "1px solid rgba(255,255,255,0.15)",
+        borderRadius: 12,
+        padding: 12,
+        background: "#ffffff",
+        color: "#111111",
+        minHeight: 500,
+      }}
+    >
+      <h3 style={{ marginTop: 0, marginBottom: 6 }}>Position Tower</h3>
+
+      {frameDate && (
+        <div style={{ fontSize: 12, opacity: 0.65, marginBottom: 12 }}>
+          Replay frame: {new Date(frameDate).toLocaleString()}
+        </div>
+      )}
+
+      {!tower?.length && (
+        <div style={{ opacity: 0.7 }}>No position data yet.</div>
+      )}
+
+      {!!tower?.length && (
+        <div style={{ display: "grid", gap: 8 }}>
+          {tower.map((row) => (
+            <div
+              key={row.driver_number}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "44px 1fr 60px",
+                alignItems: "center",
+                gap: 10,
+                padding: "10px 12px",
+                borderRadius: 10,
+                background: "#f5f5f5",
+                border: "1px solid rgba(0,0,0,0.06)",
+              }}
+            >
+              <div style={{ fontWeight: 900, fontSize: 18 }}>
+                {row.position}
+              </div>
+
+              <div style={{ fontWeight: 800 }}>
+                {getDriverCode(row.driver_number)}
+              </div>
+
+              <div style={{ textAlign: "right", opacity: 0.75 }}>
+                #{row.driver_number}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+
+
+
+
+
+
+
+{/*function PositionTower({ tower }) {
   return (
     <div
       style={{
@@ -128,13 +225,95 @@ function PositionTower({ tower }) {
       )}
     </div>
   );
-}
-
-
+}*/}
 
 export default function RealTime() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
+  const [towerData, setTowerData] = useState([]);
+
+  
+const [replayFrames, setReplayFrames] = useState([]);
+const [replayIndex, setReplayIndex] = useState(0);
+const [replayFrameDate, setReplayFrameDate] = useState(null);
+const [isReplayRunning, setIsReplayRunning] = useState(false);
+
+
+useEffect(() => {
+  // privremeni replay test
+  authFetch("/api/realtime/test-tower-replay?session_key=11234")
+    .then((r) => r.json())
+    .then((j) => {
+      console.log("TEST TOWER REPLAY RESPONSE:", j);
+
+      if (j.ok) {
+        const frames = buildReplayFrames(j.rows || []);
+        setReplayFrames(frames);
+        setReplayIndex(0);
+
+        if (frames.length > 0) {
+          setTowerData(frames[0].tower);
+          setReplayFrameDate(frames[0].date);
+        }
+      }
+    })
+    .catch((e) => {
+      console.error("TEST TOWER REPLAY FETCH ERROR:", e);
+    });
+}, []);
+
+
+
+useEffect(() => {
+  if (!replayFrames.length || !isReplayRunning) return;
+
+  const id = setInterval(() => {
+    setReplayIndex((prev) => {
+      const next = prev + 1;
+
+      if (next >= replayFrames.length) {
+        return 0; // vrti ispočetka
+      }
+
+      return next;
+    });
+  }, 700);
+
+  return () => clearInterval(id);
+}, [replayFrames, isReplayRunning]);
+
+
+
+useEffect(() => {
+  if (!replayFrames.length) return;
+
+  const frame = replayFrames[replayIndex];
+  if (!frame) return;
+
+  setTowerData(frame.tower);
+  setReplayFrameDate(frame.date);
+}, [replayIndex, replayFrames]);
+
+
+
+
+
+
+
+
+  useEffect(() => {
+  authFetch("/api/realtime/test-tower?session_key=11234")
+    .then((r) => r.json())
+    .then((j) => {
+      console.log("TEST TOWER RESPONSE:", j);
+      if (j.ok) {
+        setTowerData(j.tower || []);
+      }
+    })
+    .catch((e) => {
+      console.error("TEST TOWER FETCH ERROR:", e);
+    });
+}, []);
 
   useEffect(() => {
     setErr("");
@@ -152,9 +331,92 @@ export default function RealTime() {
       .catch((e) => setErr(String(e)));
   }, []);
 
+  useEffect(() => {
+    if (data?.mode !== "live-session") {
+      setTowerData([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadTower = () => {
+      authFetch("/api/realtime/test-tower?session_key=9693")
+        .then((r) => r.json())
+        .then((j) => {
+          if (!cancelled && j.ok) {
+            setTowerData(j.tower || []);
+          }
+        })
+        .catch(() => {});
+    };
+
+    loadTower();
+    const id = setInterval(loadTower, 2000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [data?.mode]);
+
   return (
     <div style={{ padding: "16px 18px" }}>
       <h2>Real Time</h2>
+
+
+      {/*<div style={{ marginTop: 20 }}>
+  <h3>TEST POSITION TOWER</h3>
+  <PositionTower tower={towerData} />
+</div> */}
+
+<div style={{ marginTop: 20, marginBottom: 20 }}>
+  <h3>Replay Test</h3>
+
+  <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12 }}>
+    <button
+      onClick={() => setIsReplayRunning((v) => !v)}
+      style={{
+        padding: "8px 14px",
+        borderRadius: 8,
+        border: "1px solid rgba(255,255,255,0.15)",
+        cursor: "pointer",
+      }}
+    >
+      {isReplayRunning ? "Pause" : "Play"}
+    </button>
+
+    <button
+      onClick={() => {
+        setReplayIndex(0);
+        if (replayFrames[0]) {
+          setTowerData(replayFrames[0].tower);
+          setReplayFrameDate(replayFrames[0].date);
+        }
+      }}
+      style={{
+        padding: "8px 14px",
+        borderRadius: 8,
+        border: "1px solid rgba(255,255,255,0.15)",
+        cursor: "pointer",
+      }}
+    >
+      Reset
+    </button>
+
+    <div style={{ fontSize: 13, opacity: 0.75 }}>
+      Frames: {replayFrames.length} | Current: {replayIndex + 1}
+    </div>
+  </div>
+
+  <PositionTower tower={towerData} frameDate={replayFrameDate} />
+</div>
+
+
+
+
+
+
+
 
       {err && <div>{err}</div>}
       {!data && !err && <div>Loading...</div>}
@@ -176,7 +438,6 @@ export default function RealTime() {
               boxShadow: "0 10px 24px rgba(0,0,0,0.12)",
             }}
           >
-            {/* Header */}
             <div
               style={{
                 background: "#151922",
@@ -214,7 +475,6 @@ export default function RealTime() {
               )}
             </div>
 
-            {/* Content */}
             <div
               style={{
                 display: "grid",
@@ -224,7 +484,6 @@ export default function RealTime() {
                 alignItems: "start",
               }}
             >
-              {/* Left info */}
               <div>
                 <InfoRow
                   label="Circuit"
@@ -266,7 +525,6 @@ export default function RealTime() {
                 />
               </div>
 
-              {/* Right image */}
               <div>
                 {data.nextMeeting.circuit_image ? (
                   <div
@@ -314,191 +572,187 @@ export default function RealTime() {
 
       {/* ===================== NEXT SESSION ===================== */}
       {data?.mode === "next-session" && (
-  <div style={{ marginTop: 20 }}>
-    <h3>Next Session</h3>
+        <div style={{ marginTop: 20 }}>
+          <h3>Next Session</h3>
 
-    <div
-      style={{
-        marginTop: 12,
-        border: "1px solid rgba(255,255,255,0.15)",
-        borderRadius: 16,
-        overflow: "hidden",
-        background: "#ffffff",
-        color: "#111111",
-        maxWidth: 1100,
-        boxShadow: "0 10px 24px rgba(0,0,0,0.12)",
-      }}
-    >
-      {/* Header */}
-      <div
-        style={{
-          background: "#151922",
-          color: "#ffffff",
-          padding: "16px 20px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
-        <div>
-          <div style={{ fontSize: 26, fontWeight: 900 }}>
-            {data.meeting?.meeting_name || "Meeting in progress"}
-          </div>
-          <div style={{ opacity: 0.8, marginTop: 4 }}>
-            {data.meeting?.meeting_official_name || "—"}
-          </div>
-        </div>
-
-        <div
-          style={{
-            background: "rgba(255,255,255,0.14)",
-            padding: "8px 14px",
-            borderRadius: 999,
-            fontWeight: 800,
-            fontSize: 13,
-          }}
-        >
-          Weekend in progress
-        </div>
-      </div>
-
-      {/* Content */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1.1fr 0.9fr",
-          gap: 24,
-          padding: 20,
-          alignItems: "start",
-        }}
-      >
-        {/* Left side */}
-        <div>
           <div
             style={{
-              border: "1px solid rgba(0,0,0,0.08)",
-              borderRadius: 14,
-              padding: 16,
-              marginBottom: 20,
-              background: "#f8f8f8",
+              marginTop: 12,
+              border: "1px solid rgba(255,255,255,0.15)",
+              borderRadius: 16,
+              overflow: "hidden",
+              background: "#ffffff",
+              color: "#111111",
+              maxWidth: 1100,
+              boxShadow: "0 10px 24px rgba(0,0,0,0.12)",
             }}
           >
-            <div style={{ fontSize: 13, opacity: 0.7, marginBottom: 6 }}>
-              Upcoming session
+            <div
+              style={{
+                background: "#151922",
+                color: "#ffffff",
+                padding: "16px 20px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 26, fontWeight: 900 }}>
+                  {data.meeting?.meeting_name || "Meeting in progress"}
+                </div>
+                <div style={{ opacity: 0.8, marginTop: 4 }}>
+                  {data.meeting?.meeting_official_name || "—"}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  background: "rgba(255,255,255,0.14)",
+                  padding: "8px 14px",
+                  borderRadius: 999,
+                  fontWeight: 800,
+                  fontSize: 13,
+                }}
+              >
+                Weekend in progress
+              </div>
             </div>
-            <div style={{ fontSize: 28, fontWeight: 900, marginBottom: 6 }}>
-              {data.nextSession?.session_name || "—"}
-            </div>
-            <div style={{ fontSize: 15, opacity: 0.8 }}>
-              {data.nextSession?.session_type || "—"}
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1.1fr 0.9fr",
+                gap: 24,
+                padding: 20,
+                alignItems: "start",
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    border: "1px solid rgba(0,0,0,0.08)",
+                    borderRadius: 14,
+                    padding: 16,
+                    marginBottom: 20,
+                    background: "#f8f8f8",
+                  }}
+                >
+                  <div style={{ fontSize: 13, opacity: 0.7, marginBottom: 6 }}>
+                    Upcoming session
+                  </div>
+                  <div style={{ fontSize: 28, fontWeight: 900, marginBottom: 6 }}>
+                    {data.nextSession?.session_name || "—"}
+                  </div>
+                  <div style={{ fontSize: 15, opacity: 0.8 }}>
+                    {data.nextSession?.session_type || "—"}
+                  </div>
+                </div>
+
+                <InfoRow
+                  label="Session Start"
+                  value={formatDateTime(data.nextSession?.date_start)}
+                />
+
+                <InfoRow
+                  label="Session End"
+                  value={formatDateTime(data.nextSession?.date_end)}
+                />
+
+                <InfoRow
+                  label="Circuit"
+                  value={
+                    data.nextSession?.circuit_short_name ||
+                    data.meeting?.circuit_short_name
+                  }
+                />
+
+                <InfoRow
+                  label="Location"
+                  value={
+                    (data.nextSession?.location || data.meeting?.location) &&
+                    (data.nextSession?.country_name || data.meeting?.country_name)
+                      ? `${data.nextSession?.location || data.meeting?.location}, ${
+                          data.nextSession?.country_name || data.meeting?.country_name
+                        }`
+                      : data.nextSession?.location ||
+                        data.meeting?.location ||
+                        data.nextSession?.country_name ||
+                        data.meeting?.country_name
+                  }
+                />
+
+                <InfoRow
+                  label="GMT Offset"
+                  value={data.nextSession?.gmt_offset || data.meeting?.gmt_offset}
+                />
+              </div>
+
+              <div>
+                {data.meeting?.country_flag && (
+                  <img
+                    src={data.meeting.country_flag}
+                    alt={data.meeting.country_name || "Flag"}
+                    style={{
+                      width: 72,
+                      height: 48,
+                      objectFit: "cover",
+                      borderRadius: 8,
+                      marginBottom: 16,
+                      border: "1px solid rgba(0,0,0,0.1)",
+                      background: "#fff",
+                    }}
+                  />
+                )}
+
+                {data.meeting?.circuit_image ? (
+                  <div
+                    style={{
+                      border: "1px solid rgba(0,0,0,0.08)",
+                      borderRadius: 14,
+                      padding: 16,
+                      background: "#f7f7f7",
+                    }}
+                  >
+                    <img
+                      src={data.meeting.circuit_image}
+                      alt={data.meeting.circuit_short_name || "Circuit"}
+                      style={{
+                        width: "100%",
+                        maxWidth: 420,
+                        display: "block",
+                        margin: "0 auto",
+                        objectFit: "contain",
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      border: "1px solid rgba(0,0,0,0.08)",
+                      borderRadius: 14,
+                      padding: 16,
+                      background: "#f7f7f7",
+                      minHeight: 220,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      opacity: 0.6,
+                    }}
+                  >
+                    No circuit image available
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-
-          <InfoRow
-            label="Session Start"
-            value={formatDateTime(data.nextSession?.date_start)}
-          />
-
-          <InfoRow
-            label="Session End"
-            value={formatDateTime(data.nextSession?.date_end)}
-          />
-
-          <InfoRow
-            label="Circuit"
-            value={
-              data.nextSession?.circuit_short_name ||
-              data.meeting?.circuit_short_name
-            }
-          />
-
-          <InfoRow
-            label="Location"
-            value={
-              (data.nextSession?.location || data.meeting?.location) &&
-              (data.nextSession?.country_name || data.meeting?.country_name)
-                ? `${data.nextSession?.location || data.meeting?.location}, ${
-                    data.nextSession?.country_name || data.meeting?.country_name
-                  }`
-                : data.nextSession?.location ||
-                  data.meeting?.location ||
-                  data.nextSession?.country_name ||
-                  data.meeting?.country_name
-            }
-          />
-
-          <InfoRow
-            label="GMT Offset"
-            value={data.nextSession?.gmt_offset || data.meeting?.gmt_offset}
-          />
         </div>
-
-        {/* Right side */}
-        <div>
-          {data.meeting?.country_flag && (
-            <img
-              src={data.meeting.country_flag}
-              alt={data.meeting.country_name || "Flag"}
-              style={{
-                width: 72,
-                height: 48,
-                objectFit: "cover",
-                borderRadius: 8,
-                marginBottom: 16,
-                border: "1px solid rgba(0,0,0,0.1)",
-                background: "#fff",
-              }}
-            />
-          )}
-
-          {data.meeting?.circuit_image ? (
-            <div
-              style={{
-                border: "1px solid rgba(0,0,0,0.08)",
-                borderRadius: 14,
-                padding: 16,
-                background: "#f7f7f7",
-              }}
-            >
-              <img
-                src={data.meeting.circuit_image}
-                alt={data.meeting.circuit_short_name || "Circuit"}
-                style={{
-                  width: "100%",
-                  maxWidth: 420,
-                  display: "block",
-                  margin: "0 auto",
-                  objectFit: "contain",
-                }}
-              />
-            </div>
-          ) : (
-            <div
-              style={{
-                border: "1px solid rgba(0,0,0,0.08)",
-                borderRadius: 14,
-                padding: 16,
-                background: "#f7f7f7",
-                minHeight: 220,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                opacity: 0.6,
-              }}
-            >
-              No circuit image available
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  </div>
-)}
+      )}
 
       {/* ===================== LIVE SESSION ===================== */}
-      {data?.mode === "live-session" && (
+      {data?.mode === "live session" && (
         <div
           style={{
             display: "grid",
@@ -508,7 +762,7 @@ export default function RealTime() {
             marginTop: 20,
           }}
         >
-          <PositionTower tower = {towerData}></PositionTower>
+          <PositionTower tower={towerData} />
 
           <div
             style={{

@@ -1,9 +1,18 @@
 import { useEffect, useState } from "react";
 import { authFetch } from "../api";
 
-function formatDate(dateStr) {
+function formatDateTime(dateStr) {
   if (!dateStr) return "—";
   return new Date(dateStr).toLocaleString();
+}
+
+function InfoRow({ label, value }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontSize: 13, opacity: 0.7, marginBottom: 4 }}>{label}</div>
+      <div style={{ fontWeight: 700 }}>{value || "—"}</div>
+    </div>
+  );
 }
 
 export default function RealTime() {
@@ -14,11 +23,11 @@ export default function RealTime() {
     setErr("");
     setData(null);
 
-    authFetch("/api/realtime/up-next?year=2026")
+    authFetch("/api/realtime/status")
       .then((r) => r.json())
       .then((j) => {
         if (!j.ok) {
-          setErr(j.error || "Error loading up-next data");
+          setErr(j.error || "Error loading realtime status");
           return;
         }
         setData(j);
@@ -33,13 +42,8 @@ export default function RealTime() {
       {err && <div>{err}</div>}
       {!data && !err && <div>Loading...</div>}
 
-      {data && !data.nextMeeting && (
-        <div style={{ marginTop: 20, opacity: 0.7 }}>
-          No upcoming meeting found.
-        </div>
-      )}
-
-      {data && data.nextMeeting && (
+      {/* ===================== UP NEXT ===================== */}
+      {data?.mode === "up-next" && data?.nextMeeting && (
         <div style={{ marginTop: 20 }}>
           <h3>Up Next</h3>
 
@@ -49,95 +53,381 @@ export default function RealTime() {
               border: "1px solid rgba(255,255,255,0.15)",
               borderRadius: 16,
               overflow: "hidden",
-              background: "#fff",
-              color: "#111",
-              maxWidth: 900,
-              boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+              background: "#ffffff",
+              color: "#111111",
+              maxWidth: 1100,
+              boxShadow: "0 10px 24px rgba(0,0,0,0.12)",
             }}
           >
+            {/* Header */}
             <div
               style={{
-                padding: "14px 18px",
-                fontWeight: 900,
-                fontSize: 20,
                 background: "#151922",
-                color: "#fff",
+                color: "#ffffff",
+                padding: "16px 20px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12,
+                flexWrap: "wrap",
               }}
             >
-              {data.nextMeeting.meeting_name || "Next Meeting"}
+              <div>
+                <div style={{ fontSize: 26, fontWeight: 900 }}>
+                  {data.nextMeeting.meeting_name || "Next Meeting"}
+                </div>
+                <div style={{ opacity: 0.8, marginTop: 4 }}>
+                  {data.nextMeeting.meeting_official_name || "—"}
+                </div>
+              </div>
+
+              {data.nextMeeting.country_flag && (
+                <img
+                  src={data.nextMeeting.country_flag}
+                  alt={data.nextMeeting.country_name || "Flag"}
+                  style={{
+                    width: 72,
+                    height: 48,
+                    objectFit: "cover",
+                    borderRadius: 8,
+                    border: "1px solid rgba(255,255,255,0.2)",
+                    background: "#fff",
+                  }}
+                />
+              )}
             </div>
 
+            {/* Content */}
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "1.2fr 1fr",
-                gap: 20,
-                padding: 18,
+                gridTemplateColumns: "1.1fr 0.9fr",
+                gap: 24,
+                padding: 20,
                 alignItems: "start",
               }}
             >
+              {/* Left info */}
               <div>
-                <div style={{ fontSize: 14, opacity: 0.7, marginBottom: 8 }}>
-                  Official name
-                </div>
-                <div style={{ fontWeight: 700, marginBottom: 16 }}>
-                  {data.nextMeeting.meeting_official_name || "—"}
-                </div>
+                <InfoRow
+                  label="Circuit"
+                  value={data.nextMeeting.circuit_short_name}
+                />
 
-                <div style={{ fontSize: 14, opacity: 0.7, marginBottom: 8 }}>
-                  Circuit
-                </div>
-                <div style={{ fontWeight: 700, marginBottom: 16 }}>
-                  {data.nextMeeting.circuit_short_name || "—"}
-                </div>
+                <InfoRow
+                  label="Location"
+                  value={
+                    data.nextMeeting.location && data.nextMeeting.country_name
+                      ? `${data.nextMeeting.location}, ${data.nextMeeting.country_name}`
+                      : data.nextMeeting.location || data.nextMeeting.country_name
+                  }
+                />
 
-                <div style={{ fontSize: 14, opacity: 0.7, marginBottom: 8 }}>
-                  Location
-                </div>
-                <div style={{ fontWeight: 700, marginBottom: 16 }}>
-                  {data.nextMeeting.location || "—"}, {data.nextMeeting.country_name || "—"}
-                </div>
+                <InfoRow
+                  label="Circuit Type"
+                  value={data.nextMeeting.circuit_type}
+                />
 
-                <div style={{ fontSize: 14, opacity: 0.7, marginBottom: 8 }}>
-                  Weekend starts
-                </div>
-                <div style={{ fontWeight: 700 }}>
-                  {formatDate(data.nextMeeting.date_start)}
-                </div>
+                <InfoRow
+                  label="Weekend Start"
+                  value={formatDateTime(data.nextMeeting.date_start)}
+                />
+
+                <InfoRow
+                  label="Weekend End"
+                  value={formatDateTime(data.nextMeeting.date_end)}
+                />
+
+                <InfoRow
+                  label="GMT Offset"
+                  value={data.nextMeeting.gmt_offset}
+                />
+
+                <InfoRow
+                  label="Season"
+                  value={data.nextMeeting.year}
+                />
               </div>
 
+              {/* Right image */}
               <div>
-                {data.nextMeeting.country_flag && (
-                  <img
-                    src={data.nextMeeting.country_flag}
-                    alt={data.nextMeeting.country_name || "Flag"}
+                {data.nextMeeting.circuit_image ? (
+                  <div
                     style={{
-                      width: 64,
-                      height: 42,
-                      objectFit: "cover",
-                      borderRadius: 6,
-                      marginBottom: 16,
-                      border: "1px solid rgba(0,0,0,0.1)",
-                    }}
-                  />
-                )}
-
-                {data.nextMeeting.circuit_image && (
-                  <img
-                    src={data.nextMeeting.circuit_image}
-                    alt={data.nextMeeting.circuit_short_name || "Circuit"}
-                    style={{
-                      width: "100%",
-                      maxWidth: 320,
-                      background: "#f5f5f5",
-                      borderRadius: 12,
-                      padding: 10,
                       border: "1px solid rgba(0,0,0,0.08)",
+                      borderRadius: 14,
+                      padding: 16,
+                      background: "#f7f7f7",
                     }}
-                  />
+                  >
+                    <img
+                      src={data.nextMeeting.circuit_image}
+                      alt={data.nextMeeting.circuit_short_name || "Circuit"}
+                      style={{
+                        width: "100%",
+                        maxWidth: 420,
+                        display: "block",
+                        margin: "0 auto",
+                        objectFit: "contain",
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      border: "1px solid rgba(0,0,0,0.08)",
+                      borderRadius: 14,
+                      padding: 16,
+                      background: "#f7f7f7",
+                      minHeight: 220,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      opacity: 0.6,
+                    }}
+                  >
+                    No circuit image available
+                  </div>
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================== NEXT SESSION ===================== */}
+      {data?.mode === "next-session" && (
+  <div style={{ marginTop: 20 }}>
+    <h3>Next Session</h3>
+
+    <div
+      style={{
+        marginTop: 12,
+        border: "1px solid rgba(255,255,255,0.15)",
+        borderRadius: 16,
+        overflow: "hidden",
+        background: "#ffffff",
+        color: "#111111",
+        maxWidth: 1100,
+        boxShadow: "0 10px 24px rgba(0,0,0,0.12)",
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          background: "#151922",
+          color: "#ffffff",
+          padding: "16px 20px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 26, fontWeight: 900 }}>
+            {data.meeting?.meeting_name || "Meeting in progress"}
+          </div>
+          <div style={{ opacity: 0.8, marginTop: 4 }}>
+            {data.meeting?.meeting_official_name || "—"}
+          </div>
+        </div>
+
+        <div
+          style={{
+            background: "rgba(255,255,255,0.14)",
+            padding: "8px 14px",
+            borderRadius: 999,
+            fontWeight: 800,
+            fontSize: 13,
+          }}
+        >
+          Weekend in progress
+        </div>
+      </div>
+
+      {/* Content */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1.1fr 0.9fr",
+          gap: 24,
+          padding: 20,
+          alignItems: "start",
+        }}
+      >
+        {/* Left side */}
+        <div>
+          <div
+            style={{
+              border: "1px solid rgba(0,0,0,0.08)",
+              borderRadius: 14,
+              padding: 16,
+              marginBottom: 20,
+              background: "#f8f8f8",
+            }}
+          >
+            <div style={{ fontSize: 13, opacity: 0.7, marginBottom: 6 }}>
+              Upcoming session
+            </div>
+            <div style={{ fontSize: 28, fontWeight: 900, marginBottom: 6 }}>
+              {data.nextSession?.session_name || "—"}
+            </div>
+            <div style={{ fontSize: 15, opacity: 0.8 }}>
+              {data.nextSession?.session_type || "—"}
+            </div>
+          </div>
+
+          <InfoRow
+            label="Session Start"
+            value={formatDateTime(data.nextSession?.date_start)}
+          />
+
+          <InfoRow
+            label="Session End"
+            value={formatDateTime(data.nextSession?.date_end)}
+          />
+
+          <InfoRow
+            label="Circuit"
+            value={
+              data.nextSession?.circuit_short_name ||
+              data.meeting?.circuit_short_name
+            }
+          />
+
+          <InfoRow
+            label="Location"
+            value={
+              (data.nextSession?.location || data.meeting?.location) &&
+              (data.nextSession?.country_name || data.meeting?.country_name)
+                ? `${data.nextSession?.location || data.meeting?.location}, ${
+                    data.nextSession?.country_name || data.meeting?.country_name
+                  }`
+                : data.nextSession?.location ||
+                  data.meeting?.location ||
+                  data.nextSession?.country_name ||
+                  data.meeting?.country_name
+            }
+          />
+
+          <InfoRow
+            label="GMT Offset"
+            value={data.nextSession?.gmt_offset || data.meeting?.gmt_offset}
+          />
+        </div>
+
+        {/* Right side */}
+        <div>
+          {data.meeting?.country_flag && (
+            <img
+              src={data.meeting.country_flag}
+              alt={data.meeting.country_name || "Flag"}
+              style={{
+                width: 72,
+                height: 48,
+                objectFit: "cover",
+                borderRadius: 8,
+                marginBottom: 16,
+                border: "1px solid rgba(0,0,0,0.1)",
+                background: "#fff",
+              }}
+            />
+          )}
+
+          {data.meeting?.circuit_image ? (
+            <div
+              style={{
+                border: "1px solid rgba(0,0,0,0.08)",
+                borderRadius: 14,
+                padding: 16,
+                background: "#f7f7f7",
+              }}
+            >
+              <img
+                src={data.meeting.circuit_image}
+                alt={data.meeting.circuit_short_name || "Circuit"}
+                style={{
+                  width: "100%",
+                  maxWidth: 420,
+                  display: "block",
+                  margin: "0 auto",
+                  objectFit: "contain",
+                }}
+              />
+            </div>
+          ) : (
+            <div
+              style={{
+                border: "1px solid rgba(0,0,0,0.08)",
+                borderRadius: 14,
+                padding: 16,
+                background: "#f7f7f7",
+                minHeight: 220,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                opacity: 0.6,
+              }}
+            >
+              No circuit image available
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
+      {/* ===================== LIVE SESSION ===================== */}
+      {data?.mode === "live-session" && (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "320px 1fr 360px",
+            gap: 16,
+            alignItems: "start",
+            marginTop: 20,
+          }}
+        >
+          <div
+            style={{
+              border: "1px solid rgba(255,255,255,0.15)",
+              borderRadius: 12,
+              padding: 12,
+              background: "#ffffff",
+              color: "#111111",
+              minHeight: 500,
+            }}
+          >
+            <h3>Position Tower</h3>
+          </div>
+
+          <div
+            style={{
+              border: "1px solid rgba(255,255,255,0.15)",
+              borderRadius: 12,
+              padding: 12,
+              background: "#ffffff",
+              color: "#111111",
+              minHeight: 500,
+            }}
+          >
+            <h3>Track Map</h3>
+          </div>
+
+          <div
+            style={{
+              border: "1px solid rgba(255,255,255,0.15)",
+              borderRadius: 12,
+              padding: 12,
+              background: "#ffffff",
+              color: "#111111",
+              minHeight: 500,
+            }}
+          >
+            <h3>Driver Details</h3>
           </div>
         </div>
       )}

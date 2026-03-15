@@ -7,6 +7,7 @@ const { sendLoginCode } = require("./mailer");
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
+const { connectOpenF1Live, getOpenF1LiveStatus, getOpenF1LatestMessages } = require("./openf1Live");
 
 
 
@@ -186,7 +187,11 @@ router.get("/api/laps", async (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`Server listening on http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
+
+  connectOpenF1Live().catch((err) => {
+    console.error("[OpenF1 Live] Initial connect failed:", err.message);
+  });
 });
 
 
@@ -755,6 +760,134 @@ router.get("/realtime/up-next", async (req, res) => {
     });
   } catch (err) {
     console.error("==== REALTIME UP NEXT ERROR ====");
+    console.error("Message:", err.message);
+
+    if (err.response) {
+      console.error("Status:", err.response.status);
+      console.error("Data:", err.response.data);
+    }
+
+    return res.status(500).json({
+      ok: false,
+      error: "Server error",
+      details: err.message,
+    });
+  }
+});
+
+
+
+
+
+router.get("/realtime/live-status", async (req, res) => {
+  try {
+    await connectOpenF1Live();
+    return res.json({
+      ok: true,
+      ...getOpenF1LiveStatus(),
+    });
+  } catch (err) {
+    return res.status(500).json({
+      ok: false,
+      error: "Failed to connect to OpenF1 live stream",
+      details: err.message,
+    });
+  }
+});
+
+router.get("/realtime/live-snapshot", async (req, res) => {
+  try {
+    await connectOpenF1Live();
+    return res.json({
+      ok: true,
+      ...getOpenF1LiveStatus(),
+      latest: getOpenF1LatestMessages(),
+    });
+  } catch (err) {
+    return res.status(500).json({
+      ok: false,
+      error: "Failed to get live snapshot",
+      details: err.message,
+    });
+  }
+});
+
+
+
+
+
+
+router.get("/realtime/status", async (req, res) => {
+  try {
+    const year = Number(req.query.year || new Date().getFullYear());
+    const now = Date.now();
+
+    const [meetingsResp, sessionsResp] = await Promise.all([
+      openf1Get("https://api.openf1.org/v1/meetings", {
+        params: { year },
+      }),
+      openf1Get("https://api.openf1.org/v1/sessions", {
+        params: { year },
+      }),
+    ]);
+
+    const meetings = (meetingsResp.data || []).sort(
+      (a, b) => new Date(a.date_start || 0) - new Date(b.date_start || 0)
+    );
+
+    const sessions = (sessionsResp.data || []).sort(
+      (a, b) => new Date(a.date_start || 0) - new Date(b.date_start || 0)
+    );
+
+    const activeSession = sessions.find((s) => {
+      const start = new Date(s.date_start || 0).getTime();
+      const end = new Date(s.date_end || 0).getTime();
+      return start <= now && now <= end;
+    });
+
+    if (activeSession) {
+      const meeting =
+        meetings.find((m) => m.meeting_key === activeSession.meeting_key) || null;
+
+      return res.json({
+        ok: true,
+        mode: "live-session",
+        meeting,
+        liveSession: activeSession,
+      });
+    }
+
+    const activeMeeting = meetings.find((m) => {
+      const start = new Date(m.date_start || 0).getTime();
+      const end = new Date(m.date_end || 0).getTime();
+      return start <= now && now <= end;
+    });
+
+    if (activeMeeting) {
+      const nextSession =
+        sessions.find((s) => {
+          const start = new Date(s.date_start || 0).getTime();
+          return s.meeting_key === activeMeeting.meeting_key && start > now;
+        }) || null;
+
+      return res.json({
+        ok: true,
+        mode: "next-session",
+        meeting: activeMeeting,
+        nextSession,
+      });
+    }
+
+    const nextMeeting =
+      meetings.find((m) => new Date(m.date_start || 0).getTime() > now) || null;
+
+    return res.json({
+      ok: true,
+      mode: "up-next",
+      nextMeeting,
+    });
+  } catch (err) {
+    console.error("==== REALTIME STATUS ERROR ====");
     console.error("Message:", err.message);
 
     if (err.response) {

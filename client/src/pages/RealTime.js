@@ -15,7 +15,7 @@ function InfoRow({ label, value }) {
   );
 }
 
-const Driver_Map = {
+const DRIVER_MAP = {
   1: "NOR",
   81: "PIA",
   63: "RUS",
@@ -41,14 +41,8 @@ const Driver_Map = {
 };
 
 function getDriverCode(num) {
-  return Driver_Map[num] || `#${num}`;
+  return DRIVER_MAP[num] || `#${num}`;
 }
-
-
-
-
-
-
 
 function buildReplayFrames(rows) {
   if (!rows?.length) return [];
@@ -91,8 +85,9 @@ function buildReplayFrames(rows) {
       });
     }
 
-    const tower = Array.from(latestByDriver.values())
-      .sort((a, b) => a.position - b.position);
+    const tower = Array.from(latestByDriver.values()).sort(
+      (a, b) => a.position - b.position
+    );
 
     if (tower.length > 0) {
       frames.push({
@@ -105,7 +100,65 @@ function buildReplayFrames(rows) {
   return frames;
 }
 
+function buildTrackReplayFrames(rows) {
+  if (!rows?.length) return [];
 
+  const sorted = [...rows].sort(
+    (a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime()
+  );
+
+  const frameMap = new Map();
+
+  for (const row of sorted) {
+    const key = row.date;
+    if (!key) continue;
+
+    if (!frameMap.has(key)) {
+      frameMap.set(key, []);
+    }
+
+    frameMap.get(key).push(row);
+  }
+
+  const timestamps = Array.from(frameMap.keys()).sort(
+    (a, b) => new Date(a).getTime() - new Date(b).getTime()
+  );
+
+  const latestByDriver = new Map();
+  const frames = [];
+
+  for (const ts of timestamps) {
+    const updates = frameMap.get(ts) || [];
+
+    for (const row of updates) {
+      const driverNumber = Number(row.driver_number);
+      const x = Number(row.x);
+      const y = Number(row.y);
+      const z = row.z != null ? Number(row.z) : null;
+
+      if (!driverNumber) continue;
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+
+      latestByDriver.set(driverNumber, {
+        driver_number: driverNumber,
+        x,
+        y,
+        z,
+      });
+    }
+
+    const points = Array.from(latestByDriver.values());
+
+    if (points.length > 0) {
+      frames.push({
+        date: ts,
+        points,
+      });
+    }
+  }
+
+  return frames;
+}
 
 function PositionTower({ tower, frameDate }) {
   return (
@@ -127,9 +180,7 @@ function PositionTower({ tower, frameDate }) {
         </div>
       )}
 
-      {!tower?.length && (
-        <div style={{ opacity: 0.7 }}>No position data yet.</div>
-      )}
+      {!tower?.length && <div style={{ opacity: 0.7 }}>No position data yet.</div>}
 
       {!!tower?.length && (
         <div style={{ display: "grid", gap: 8 }}>
@@ -147,17 +198,11 @@ function PositionTower({ tower, frameDate }) {
                 border: "1px solid rgba(0,0,0,0.06)",
               }}
             >
-              <div style={{ fontWeight: 900, fontSize: 18 }}>
-                {row.position}
-              </div>
+              <div style={{ fontWeight: 900, fontSize: 18 }}>{row.position}</div>
 
-              <div style={{ fontWeight: 800 }}>
-                {getDriverCode(row.driver_number)}
-              </div>
+              <div style={{ fontWeight: 800 }}>{getDriverCode(row.driver_number)}</div>
 
-              <div style={{ textAlign: "right", opacity: 0.75 }}>
-                #{row.driver_number}
-              </div>
+              <div style={{ textAlign: "right", opacity: 0.75 }}>#{row.driver_number}</div>
             </div>
           ))}
         </div>
@@ -166,6 +211,32 @@ function PositionTower({ tower, frameDate }) {
   );
 }
 
+function normalizeTrackPoints(points, width, height, pad) {
+  const validPoints = (points || []).filter(
+    (p) => Number.isFinite(p.x) && Number.isFinite(p.y)
+  );
+
+  if (!validPoints.length) return [];
+
+  const minX = Math.min(...validPoints.map((p) => p.x));
+  const maxX = Math.max(...validPoints.map((p) => p.x));
+  const minY = Math.min(...validPoints.map((p) => p.y));
+  const maxY = Math.max(...validPoints.map((p) => p.y));
+
+  const spanX = Math.max(1, maxX - minX);
+  const spanY = Math.max(1, maxY - minY);
+
+  return validPoints.map((p) => {
+    const renderX = pad + ((p.x - minX) / spanX) * (width - pad * 2);
+    const renderY = pad + ((p.y - minY) / spanY) * (height - pad * 2);
+
+    return {
+      ...p,
+      renderX,
+      renderY: height - renderY,
+    };
+  });
+}
 
 
 
@@ -173,8 +244,144 @@ function PositionTower({ tower, frameDate }) {
 
 
 
+function buildTransform(rows, width, height, pad, outlineDriverNumber = 1) {
+  const valid = (rows || [])
+    .filter(
+      (r) =>
+        Number(r.driver_number) === outlineDriverNumber &&
+        Number.isFinite(Number(r.x)) &&
+        Number.isFinite(Number(r.y))
+    )
+    .sort(
+      (a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime()
+    );
 
-{/*function PositionTower({ tower }) {
+  if (!valid.length) return null;
+
+  const minX = Math.min(...valid.map((p) => Number(p.x)));
+  const maxX = Math.max(...valid.map((p) => Number(p.x)));
+  const minY = Math.min(...valid.map((p) => Number(p.y)));
+  const maxY = Math.max(...valid.map((p) => Number(p.y)));
+
+  return {
+    minX,
+    maxX,
+    minY,
+    maxY,
+    width,
+    height,
+    pad,
+  };
+}
+
+function projectPoint(x, y, transform) {
+  if (!transform) return null;
+
+  const spanX = Math.max(1, transform.maxX - transform.minX);
+  const spanY = Math.max(1, transform.maxY - transform.minY);
+
+  const renderX =
+    transform.pad +
+    ((Number(x) - transform.minX) / spanX) * (transform.width - transform.pad * 2);
+
+  const renderY =
+    transform.pad +
+    ((Number(y) - transform.minY) / spanY) * (transform.height - transform.pad * 2);
+
+  return {
+    x: renderX,
+    y: transform.height - renderY,
+  };
+}
+
+function smoothPoints(points, windowSize = 2) {
+  if (!points.length) return points;
+
+  return points.map((_, index) => {
+    const from = Math.max(0, index - windowSize);
+    const to = Math.min(points.length - 1, index + windowSize);
+
+    let sumX = 0;
+    let sumY = 0;
+    let count = 0;
+
+    for (let i = from; i <= to; i++) {
+      sumX += points[i].x;
+      sumY += points[i].y;
+      count += 1;
+    }
+
+    return {
+      x: sumX / count,
+      y: sumY / count,
+    };
+  });
+}
+
+function buildTrackOutline(rows, transform, outlineDriverNumber = 1) {
+  const filtered = (rows || [])
+    .filter(
+      (r) =>
+        Number(r.driver_number) === outlineDriverNumber &&
+        Number.isFinite(Number(r.x)) &&
+        Number.isFinite(Number(r.y))
+    )
+    .sort(
+      (a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime()
+    );
+
+  const sampled = filtered.filter((_, index) => index % 4 === 0);
+
+  const projected = sampled
+    .map((p) => projectPoint(p.x, p.y, transform))
+    .filter(Boolean);
+
+  return smoothPoints(projected, 2);
+}
+
+function normalizeTrackPointsWithTransform(points, transform) {
+  return (points || [])
+    .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y))
+    .map((p) => {
+      const projected = projectPoint(p.x, p.y, transform);
+      if (!projected) return null;
+
+      return {
+        ...p,
+        renderX: projected.x,
+        renderY: projected.y,
+      };
+    })
+    .filter(Boolean);
+}
+
+
+
+
+
+function TrackMapTest({ points, frameDate, outlineRows }) {
+  const width = 700;
+  const height = 500;
+  const pad = 24;
+  const outlineDriverNumber = 1;
+
+  const transform = buildTransform(
+    outlineRows,
+    width,
+    height,
+    pad,
+    outlineDriverNumber
+  );
+
+  const normalizedCars = normalizeTrackPointsWithTransform(points, transform);
+  const outline = buildTrackOutline(
+    outlineRows,
+    transform,
+    outlineDriverNumber
+  );
+
+  const outlinePath = outline.map((p) => `${p.x},${p.y}`).join(" ");
+
   return (
     <div
       style={{
@@ -186,134 +393,175 @@ function PositionTower({ tower, frameDate }) {
         minHeight: 500,
       }}
     >
-      <h3 style={{ marginTop: 0 }}>Position Tower</h3>
+      <h3 style={{ marginTop: 0, marginBottom: 6 }}>Track Map Test</h3>
 
-      {!tower?.length && (
-        <div style={{ opacity: 0.7 }}>No live position data yet.</div>
+      {frameDate && (
+        <div style={{ fontSize: 12, opacity: 0.65, marginBottom: 12 }}>
+          Replay frame: {new Date(frameDate).toLocaleString()}
+        </div>
       )}
 
-      {!!tower?.length && (
-        <div style={{ display: "grid", gap: 8 }}>
-          {tower.map((row) => (
-            <div
-              key={row.driver_number}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "44px 1fr 60px",
-                alignItems: "center",
-                gap: 10,
-                padding: "10px 12px",
-                borderRadius: 10,
-                background: "#f5f5f5",
-                border: "1px solid rgba(0,0,0,0.06)",
-              }}
-            >
-              <div style={{ fontWeight: 900, fontSize: 18 }}>
-                {row.position}
-              </div>
+      {!normalizedCars.length && !outline.length && (
+        <div style={{ opacity: 0.7 }}>No track location data yet.</div>
+      )}
 
-              <div style={{ fontWeight: 800 }}>
-                {getDriverCode(row.driver_number)}
-              </div>
+      {(!!normalizedCars.length || !!outline.length) && (
+        <div
+          style={{
+            width: "100%",
+            maxWidth: width,
+            height,
+            margin: "0 auto",
+            borderRadius: 12,
+            overflow: "hidden",
+            background: "#f7f7f7",
+            border: "1px solid rgba(0,0,0,0.08)",
+          }}
+        >
+          <svg
+            viewBox={`0 0 ${width} ${height}`}
+            style={{ width: "100%", height: "100%", display: "block" }}
+          >
+            {!!outline.length && (
+              <polyline
+                points={outlinePath}
+                fill="none"
+                stroke="rgba(0,0,0,0.22)"
+                strokeWidth="6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            )}
 
-              <div style={{ textAlign: "right", opacity: 0.75 }}>
-                #{row.driver_number}
-              </div>
-            </div>
-          ))}
+            {normalizedCars.map((p) => (
+              <g key={p.driver_number} transform={`translate(${p.renderX}, ${p.renderY})`}>
+                <circle r="10" fill="#151922" />
+                <text
+                  x="0"
+                  y="4"
+                  textAnchor="middle"
+                  fontSize="10"
+                  fontWeight="700"
+                  fill="#ffffff"
+                >
+                  {getDriverCode(p.driver_number)}
+                </text>
+              </g>
+            ))}
+          </svg>
         </div>
       )}
     </div>
   );
-}*/}
+}
+
+function TrackMap({ points, circuitImage }) {
+  const width = 700;
+  const height = 500;
+  const pad = 30;
+
+  const normalized = normalizeTrackPoints(points, width, height, pad);
+
+  return (
+    <div
+      style={{
+        border: "1px solid rgba(255,255,255,0.15)",
+        borderRadius: 12,
+        padding: 12,
+        background: "#ffffff",
+        color: "#111111",
+        minHeight: 500,
+      }}
+    >
+      <h3 style={{ marginTop: 0 }}>Track Map</h3>
+
+      {!normalized.length && (
+        <div style={{ opacity: 0.7 }}>No track position data yet.</div>
+      )}
+
+      {!!normalized.length && (
+        <div
+          style={{
+            position: "relative",
+            width: "100%",
+            maxWidth: width,
+            height,
+            margin: "0 auto",
+            borderRadius: 12,
+            overflow: "hidden",
+            background: "#f7f7f7",
+            border: "1px solid rgba(0,0,0,0.08)",
+          }}
+        >
+          {circuitImage && (
+            <img
+              src={circuitImage}
+              alt="Circuit"
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+                opacity: 0.18,
+                pointerEvents: "none",
+              }}
+            />
+          )}
+
+          <svg
+            viewBox={`0 0 ${width} ${height}`}
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+            }}
+          >
+            {normalized.map((p) => (
+              <g
+                key={p.driver_number}
+                transform={`translate(${p.renderX}, ${p.renderY})`}
+              >
+                <circle r="10" fill="#151922" />
+                <text
+                  x="0"
+                  y="4"
+                  textAnchor="middle"
+                  fontSize="10"
+                  fontWeight="700"
+                  fill="#ffffff"
+                >
+                  {getDriverCode(p.driver_number)}
+                </text>
+              </g>
+            ))}
+          </svg>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function RealTime() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
+
   const [towerData, setTowerData] = useState([]);
+  const [trackPoints, setTrackPoints] = useState([]);
 
-  
-const [replayFrames, setReplayFrames] = useState([]);
-const [replayIndex, setReplayIndex] = useState(0);
-const [replayFrameDate, setReplayFrameDate] = useState(null);
-const [isReplayRunning, setIsReplayRunning] = useState(false);
+  const [replayFrames, setReplayFrames] = useState([]);
+  const [replayIndex, setReplayIndex] = useState(0);
+  const [replayFrameDate, setReplayFrameDate] = useState(null);
+  const [isReplayRunning, setIsReplayRunning] = useState(false);
 
+  const [trackReplayFrames, setTrackReplayFrames] = useState([]);
+  const [trackReplayIndex, setTrackReplayIndex] = useState(0);
+  const [trackReplayFrameDate, setTrackReplayFrameDate] = useState(null);
+  const [isTrackReplayRunning, setIsTrackReplayRunning] = useState(false);
+  const [trackOutlineRows, setTrackOutlineRows] = useState([]);
 
-useEffect(() => {
-  // privremeni replay test
-  authFetch("/api/realtime/test-tower-replay?session_key=11234")
-    .then((r) => r.json())
-    .then((j) => {
-      console.log("TEST TOWER REPLAY RESPONSE:", j);
-
-      if (j.ok) {
-        const frames = buildReplayFrames(j.rows || []);
-        setReplayFrames(frames);
-        setReplayIndex(0);
-
-        if (frames.length > 0) {
-          setTowerData(frames[0].tower);
-          setReplayFrameDate(frames[0].date);
-        }
-      }
-    })
-    .catch((e) => {
-      console.error("TEST TOWER REPLAY FETCH ERROR:", e);
-    });
-}, []);
-
-
-
-useEffect(() => {
-  if (!replayFrames.length || !isReplayRunning) return;
-
-  const id = setInterval(() => {
-    setReplayIndex((prev) => {
-      const next = prev + 1;
-
-      if (next >= replayFrames.length) {
-        return 0; // vrti ispočetka
-      }
-
-      return next;
-    });
-  }, 700);
-
-  return () => clearInterval(id);
-}, [replayFrames, isReplayRunning]);
-
-
-
-useEffect(() => {
-  if (!replayFrames.length) return;
-
-  const frame = replayFrames[replayIndex];
-  if (!frame) return;
-
-  setTowerData(frame.tower);
-  setReplayFrameDate(frame.date);
-}, [replayIndex, replayFrames]);
-
-
-
-
-
-
-
-
-  useEffect(() => {
-  authFetch("/api/realtime/test-tower?session_key=11234")
-    .then((r) => r.json())
-    .then((j) => {
-      console.log("TEST TOWER RESPONSE:", j);
-      if (j.ok) {
-        setTowerData(j.tower || []);
-      }
-    })
-    .catch((e) => {
-      console.error("TEST TOWER FETCH ERROR:", e);
-    });
-}, []);
+  const [showReplayTests, setShowReplayTests] = useState(true);
 
   useEffect(() => {
     setErr("");
@@ -331,7 +579,157 @@ useEffect(() => {
       .catch((e) => setErr(String(e)));
   }, []);
 
+  // ===================== TOWER REPLAY TEST =====================
   useEffect(() => {
+    if (!showReplayTests) return;
+
+    authFetch("/api/realtime/test-tower-replay?session_key=11234")
+      .then((r) => r.json())
+      .then((j) => {
+        console.log("TEST TOWER REPLAY RESPONSE:", j);
+
+        if (j.ok) {
+          const frames = buildReplayFrames(j.rows || []);
+          setReplayFrames(frames);
+          setReplayIndex(0);
+
+          if (frames.length > 0) {
+            setTowerData(frames[0].tower);
+            setReplayFrameDate(frames[0].date);
+          }
+        }
+      })
+      .catch((e) => {
+        console.error("TEST TOWER REPLAY FETCH ERROR:", e);
+      });
+  }, [showReplayTests]);
+
+  useEffect(() => {
+    if (!showReplayTests || !replayFrames.length || !isReplayRunning) return;
+
+    const id = setInterval(() => {
+      setReplayIndex((prev) => (prev + 1 >= replayFrames.length ? 0 : prev + 1));
+    }, 700);
+
+    return () => clearInterval(id);
+  }, [showReplayTests, replayFrames, isReplayRunning]);
+
+  useEffect(() => {
+    if (!showReplayTests || !replayFrames.length) return;
+
+    const frame = replayFrames[replayIndex];
+    if (!frame) return;
+
+    setTowerData(frame.tower);
+    setReplayFrameDate(frame.date);
+  }, [showReplayTests, replayIndex, replayFrames]);
+
+  // ===================== TRACK MAP REPLAY TEST =====================
+  useEffect(() => {
+    if (!showReplayTests) return;
+
+    authFetch("/api/realtime/test-track-map-replay?session_key=11234")
+      .then((r) => r.json())
+      .then((j) => {
+        console.log("TEST TRACK MAP REPLAY RESPONSE:", j);
+
+        if (j.ok) {
+          const frames = buildTrackReplayFrames(j.rows || []);
+          console.log("TRACK REPLAY FRAMES:", frames.length);
+          console.log("FIRST FRAME:", frames[0]);
+
+          setTrackReplayFrames(frames);
+          setTrackReplayIndex(0);
+
+          if (frames.length > 0) {
+            setTrackPoints(frames[0].points);
+            setTrackReplayFrameDate(frames[0].date);
+          }
+        }
+      })
+      .catch((e) => {
+        console.error("TEST TRACK MAP REPLAY FETCH ERROR:", e);
+      });
+  }, [showReplayTests]);
+
+  useEffect(() => {
+    if (!showReplayTests || !trackReplayFrames.length || !isTrackReplayRunning) return;
+
+    const id = setInterval(() => {
+      setTrackReplayIndex((prev) =>
+        prev + 1 >= trackReplayFrames.length ? 0 : prev + 1
+      );
+    }, 700);
+
+    return () => clearInterval(id);
+  }, [showReplayTests, trackReplayFrames, isTrackReplayRunning]);
+
+  useEffect(() => {
+    if (!showReplayTests || !trackReplayFrames.length) return;
+
+    const frame = trackReplayFrames[trackReplayIndex];
+    if (!frame) return;
+
+    console.log("CURRENT FRAME:", frame);
+    console.log("TRACK POINTS:", frame.points);
+
+    setTrackPoints(frame.points);
+    setTrackReplayFrameDate(frame.date);
+  }, [showReplayTests, trackReplayIndex, trackReplayFrames]);
+
+
+  useEffect(() => {
+  if (!showReplayTests) return;
+
+  authFetch("/api/realtime/test-track-outline?session_key=11234&driver_number=1")
+    .then((r) => r.json())
+    .then((j) => {
+      console.log("TEST TRACK OUTLINE RESPONSE:", j);
+
+      if (j.ok) {
+        setTrackOutlineRows(j.rows || []);
+      }
+    })
+    .catch((e) => {
+      console.error("TEST TRACK OUTLINE FETCH ERROR:", e);
+    });
+}, [showReplayTests]);
+
+  // ===================== LIVE TRACK MAP =====================
+  useEffect(() => {
+    if (showReplayTests) return;
+
+    if (data?.mode !== "live-session") {
+      setTrackPoints([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadTrackMap = () => {
+      authFetch("/api/realtime/track-map")
+        .then((r) => r.json())
+        .then((j) => {
+          if (!cancelled && j.ok) {
+            setTrackPoints(j.points || []);
+          }
+        })
+        .catch(() => {});
+    };
+
+    loadTrackMap();
+    const id = setInterval(loadTrackMap, 2000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [data?.mode, showReplayTests]);
+
+  // ===================== LIVE TOWER =====================
+  useEffect(() => {
+    if (showReplayTests) return;
+
     if (data?.mode !== "live-session") {
       setTowerData([]);
       return;
@@ -340,7 +738,7 @@ useEffect(() => {
     let cancelled = false;
 
     const loadTower = () => {
-      authFetch("/api/realtime/test-tower?session_key=9693")
+      authFetch("/api/realtime/position-tower")
         .then((r) => r.json())
         .then((j) => {
           if (!cancelled && j.ok) {
@@ -357,71 +755,135 @@ useEffect(() => {
       cancelled = true;
       clearInterval(id);
     };
-  }, [data?.mode]);
+  }, [data?.mode, showReplayTests]);
 
   return (
     <div style={{ padding: "16px 18px" }}>
       <h2>Real Time</h2>
 
+      <div style={{ marginTop: 12, marginBottom: 20 }}>
+        <button
+          onClick={() => setShowReplayTests((v) => !v)}
+          style={{
+            padding: "8px 14px",
+            borderRadius: 8,
+            border: "1px solid rgba(255,255,255,0.15)",
+            cursor: "pointer",
+          }}
+        >
+          {showReplayTests ? "Switch to Live Mode" : "Switch to Replay Test Mode"}
+        </button>
+      </div>
 
-      {/*<div style={{ marginTop: 20 }}>
-  <h3>TEST POSITION TOWER</h3>
-  <PositionTower tower={towerData} />
-</div> */}
+      {showReplayTests && (
+        <>
+          <div style={{ marginTop: 20, marginBottom: 20 }}>
+            <h3>Replay Test - Position Tower</h3>
 
-<div style={{ marginTop: 20, marginBottom: 20 }}>
-  <h3>Replay Test</h3>
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                alignItems: "center",
+                marginBottom: 12,
+              }}
+            >
+              <button
+                onClick={() => setIsReplayRunning((v) => !v)}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 8,
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  cursor: "pointer",
+                }}
+              >
+                {isReplayRunning ? "Pause" : "Play"}
+              </button>
 
-  <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12 }}>
-    <button
-      onClick={() => setIsReplayRunning((v) => !v)}
-      style={{
-        padding: "8px 14px",
-        borderRadius: 8,
-        border: "1px solid rgba(255,255,255,0.15)",
-        cursor: "pointer",
-      }}
-    >
-      {isReplayRunning ? "Pause" : "Play"}
-    </button>
+              <button
+                onClick={() => {
+                  setReplayIndex(0);
+                  if (replayFrames[0]) {
+                    setTowerData(replayFrames[0].tower);
+                    setReplayFrameDate(replayFrames[0].date);
+                  }
+                }}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 8,
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  cursor: "pointer",
+                }}
+              >
+                Reset
+              </button>
 
-    <button
-      onClick={() => {
-        setReplayIndex(0);
-        if (replayFrames[0]) {
-          setTowerData(replayFrames[0].tower);
-          setReplayFrameDate(replayFrames[0].date);
-        }
-      }}
-      style={{
-        padding: "8px 14px",
-        borderRadius: 8,
-        border: "1px solid rgba(255,255,255,0.15)",
-        cursor: "pointer",
-      }}
-    >
-      Reset
-    </button>
+              <div style={{ fontSize: 13, opacity: 0.75 }}>
+                Frames: {replayFrames.length} | Current: {replayIndex + 1}
+              </div>
+            </div>
 
-    <div style={{ fontSize: 13, opacity: 0.75 }}>
-      Frames: {replayFrames.length} | Current: {replayIndex + 1}
-    </div>
-  </div>
+            <PositionTower tower={towerData} frameDate={replayFrameDate} />
+          </div>
 
-  <PositionTower tower={towerData} frameDate={replayFrameDate} />
-</div>
+          <div style={{ marginTop: 20, marginBottom: 20 }}>
+            <h3>Replay Test - Track Map</h3>
 
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                alignItems: "center",
+                marginBottom: 12,
+              }}
+            >
+              <button
+                onClick={() => setIsTrackReplayRunning((v) => !v)}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 8,
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  cursor: "pointer",
+                }}
+              >
+                {isTrackReplayRunning ? "Pause" : "Play"}
+              </button>
 
+              <button
+                onClick={() => {
+                  setTrackReplayIndex(0);
+                  if (trackReplayFrames[0]) {
+                    setTrackPoints(trackReplayFrames[0].points);
+                    setTrackReplayFrameDate(trackReplayFrames[0].date);
+                  }
+                }}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 8,
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  cursor: "pointer",
+                }}
+              >
+                Reset
+              </button>
 
+              <div style={{ fontSize: 13, opacity: 0.75 }}>
+                Frames: {trackReplayFrames.length} | Current: {trackReplayIndex + 1}
+              </div>
+            </div>
 
-
-
-
+            <TrackMapTest
+  points={trackPoints}
+  frameDate={trackReplayFrameDate}
+  outlineRows={trackOutlineRows}
+/>
+          </div>
+        </>
+      )}
 
       {err && <div>{err}</div>}
       {!data && !err && <div>Loading...</div>}
 
-      {/* ===================== UP NEXT ===================== */}
       {data?.mode === "up-next" && data?.nextMeeting && (
         <div style={{ marginTop: 20 }}>
           <h3>Up Next</h3>
@@ -489,7 +951,6 @@ useEffect(() => {
                   label="Circuit"
                   value={data.nextMeeting.circuit_short_name}
                 />
-
                 <InfoRow
                   label="Location"
                   value={
@@ -498,31 +959,23 @@ useEffect(() => {
                       : data.nextMeeting.location || data.nextMeeting.country_name
                   }
                 />
-
                 <InfoRow
                   label="Circuit Type"
                   value={data.nextMeeting.circuit_type}
                 />
-
                 <InfoRow
                   label="Weekend Start"
                   value={formatDateTime(data.nextMeeting.date_start)}
                 />
-
                 <InfoRow
                   label="Weekend End"
                   value={formatDateTime(data.nextMeeting.date_end)}
                 />
-
                 <InfoRow
                   label="GMT Offset"
                   value={data.nextMeeting.gmt_offset}
                 />
-
-                <InfoRow
-                  label="Season"
-                  value={data.nextMeeting.year}
-                />
+                <InfoRow label="Season" value={data.nextMeeting.year} />
               </div>
 
               <div>
@@ -570,7 +1023,6 @@ useEffect(() => {
         </div>
       )}
 
-      {/* ===================== NEXT SESSION ===================== */}
       {data?.mode === "next-session" && (
         <div style={{ marginTop: 20 }}>
           <h3>Next Session</h3>
@@ -655,12 +1107,10 @@ useEffect(() => {
                   label="Session Start"
                   value={formatDateTime(data.nextSession?.date_start)}
                 />
-
                 <InfoRow
                   label="Session End"
                   value={formatDateTime(data.nextSession?.date_end)}
                 />
-
                 <InfoRow
                   label="Circuit"
                   value={
@@ -668,7 +1118,6 @@ useEffect(() => {
                     data.meeting?.circuit_short_name
                   }
                 />
-
                 <InfoRow
                   label="Location"
                   value={
@@ -683,7 +1132,6 @@ useEffect(() => {
                         data.meeting?.country_name
                   }
                 />
-
                 <InfoRow
                   label="GMT Offset"
                   value={data.nextSession?.gmt_offset || data.meeting?.gmt_offset}
@@ -751,8 +1199,7 @@ useEffect(() => {
         </div>
       )}
 
-      {/* ===================== LIVE SESSION ===================== */}
-      {data?.mode === "live session" && (
+      {!showReplayTests && data?.mode === "live-session" && (
         <div
           style={{
             display: "grid",
@@ -763,20 +1210,10 @@ useEffect(() => {
           }}
         >
           <PositionTower tower={towerData} />
-
-          <div
-            style={{
-              border: "1px solid rgba(255,255,255,0.15)",
-              borderRadius: 12,
-              padding: 12,
-              background: "#ffffff",
-              color: "#111111",
-              minHeight: 500,
-            }}
-          >
-            <h3>Track Map</h3>
-          </div>
-
+          <TrackMap
+            points={trackPoints}
+            circuitImage={data?.meeting?.circuit_image}
+          />
           <div
             style={{
               border: "1px solid rgba(255,255,255,0.15)",

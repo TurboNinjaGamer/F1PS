@@ -1059,3 +1059,238 @@ router.get("/realtime/test-tower-replay", async (req, res) => {
     });
   }
 });
+
+
+
+
+
+
+
+
+
+router.get("/realtime/track-map", async (req, res) => {
+  try {
+    const live = getOpenF1LatestMessages();
+    const status = getOpenF1LiveStatus();
+
+    const rows = live.location || [];
+
+    const latestByDriver = new Map();
+
+    for (const row of rows) {
+      const driverNumber = Number(row.driver_number);
+      if (!driverNumber) continue;
+
+      const prev = latestByDriver.get(driverNumber);
+
+      const currentRank = Number(row._id || 0);
+      const prevRank = Number(prev?._id || 0);
+
+      if (!prev || currentRank >= prevRank) {
+        latestByDriver.set(driverNumber, row);
+      }
+    }
+
+    const points = Array.from(latestByDriver.values())
+      .map((row) => ({
+        driver_number: Number(row.driver_number),
+        x: Number(row.x),
+        y: Number(row.y),
+        z: row.z != null ? Number(row.z) : null,
+        date: row.date || null,
+        meeting_key: row.meeting_key || null,
+        session_key: row.session_key || null,
+      }))
+      .filter((row) => Number.isFinite(row.x) && Number.isFinite(row.y));
+
+    return res.json({
+      ok: true,
+      connected: status.connected,
+      count: points.length,
+      points,
+    });
+  } catch (err) {
+    console.error("==== TRACK MAP ERROR ====");
+    console.error("Message:", err.message);
+
+    return res.status(500).json({
+      ok: false,
+      error: "Server error",
+      details: err.message,
+    });
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+router.get("/realtime/test-track-map", async (req, res) => {
+  try {
+    const sessionKey = Number(req.query.session_key);
+
+    if (!sessionKey) {
+      return res.status(400).json({
+        ok: false,
+        error: "session_key required",
+      });
+    }
+
+    const resp = await openf1Get("https://api.openf1.org/v1/location?session_key=11234", {
+      params: { session_key: sessionKey },
+    });
+
+    const rows = resp.data || [];
+    const latestByDriver = new Map();
+
+    for (const row of rows) {
+      const dn = Number(row.driver_number);
+      if (!dn) continue;
+
+      const prev = latestByDriver.get(dn);
+
+      const currentTime = new Date(row.date || 0).getTime();
+      const prevTime = prev ? new Date(prev.date || 0).getTime() : 0;
+
+      if (!prev || currentTime > prevTime) {
+        latestByDriver.set(dn, row);
+      }
+    }
+
+    const points = Array.from(latestByDriver.values())
+      .map((row) => ({
+        driver_number: Number(row.driver_number),
+        x: Number(row.x),
+        y: Number(row.y),
+        z: row.z != null ? Number(row.z) : null,
+        date: row.date || null,
+        meeting_key: row.meeting_key || null,
+        session_key: row.session_key || null,
+      }))
+      .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
+
+    return res.json({
+      ok: true,
+      count: points.length,
+      points,
+    });
+  } catch (err) {
+    console.error("[TEST TRACK MAP ERROR]", err.message);
+
+    return res.status(500).json({
+      ok: false,
+      error: err.message,
+    });
+  }
+});
+
+
+
+router.get("/realtime/test-track-map-replay", async (req, res) => {
+  try {
+    const sessionKey = Number(req.query.session_key);
+
+    if (!sessionKey) {
+      return res.status(400).json({
+        ok: false,
+        error: "session_key required",
+      });
+    }
+
+    const sessionResp = await openf1Get("https://api.openf1.org/v1/sessions", {
+      params: { session_key: sessionKey },
+    });
+
+    const session = (sessionResp.data || [])[0];
+    if (!session) {
+      return res.status(404).json({
+        ok: false,
+        error: "Session not found",
+      });
+    }
+
+    const start = new Date(session.date_start);
+    const end = new Date(start.getTime() + 60 * 1000);
+
+    const url =
+      `https://api.openf1.org/v1/location` +
+      `?session_key=${sessionKey}` +
+      `&date>=${encodeURIComponent(start.toISOString())}` +
+      `&date<=${encodeURIComponent(end.toISOString())}`;
+
+    console.log("TRACK MAP URL:", url);
+
+    const resp = await openf1Get(url);
+
+    return res.json({
+      ok: true,
+      session_key: sessionKey,
+      date_from: start.toISOString(),
+      date_to: end.toISOString(),
+      rows: resp.data || [],
+    });
+  } catch (err) {
+    console.error("[TEST TRACK MAP REPLAY ERROR]", err.message);
+    console.error("Status:", err.response?.status);
+    console.error("Data:", err.response?.data);
+
+    return res.status(500).json({
+      ok: false,
+      error: err.message,
+      status: err.response?.status || null,
+      details: err.response?.data || null,
+    });
+  }
+});
+
+
+
+
+
+router.get("/realtime/test-track-outline", async (req, res) => {
+  try {
+    const sessionKey = Number(req.query.session_key);
+    const driverNumber = Number(req.query.driver_number || 1);
+
+    if (!sessionKey) {
+      return res.status(400).json({
+        ok: false,
+        error: "session_key required",
+      });
+    }
+
+    const resp = await openf1Get("https://api.openf1.org/v1/location", {
+      params: {
+        session_key: sessionKey,
+        driver_number: driverNumber,
+      },
+    });
+
+    return res.json({
+      ok: true,
+      session_key: sessionKey,
+      driver_number: driverNumber,
+      rows: resp.data || [],
+    });
+  } catch (err) {
+    console.error("[TEST TRACK OUTLINE ERROR]", err.message);
+    console.error("Status:", err.response?.status);
+    console.error("Data:", err.response?.data);
+
+    return res.status(500).json({
+      ok: false,
+      error: err.message,
+      status: err.response?.status || null,
+      details: err.response?.data || null,
+    });
+  }
+});

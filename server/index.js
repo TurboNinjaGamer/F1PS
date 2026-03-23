@@ -1294,3 +1294,65 @@ router.get("/realtime/test-track-outline", async (req, res) => {
     });
   }
 });
+
+
+
+
+
+
+
+
+
+router.get("/realtime/driver-details", async (req, res) => {
+  try {
+    const sessionKey = Number(req.query.session_key);
+    const driverNumber = Number(req.query.driver_number);
+
+    if (!sessionKey || !driverNumber) {
+      return res.status(400).json({
+        ok: false,
+        error: "session_key and driver_number are required",
+      });
+    }
+
+    const [driverResp, lapsResp] = await Promise.all([
+      openf1Get("https://api.openf1.org/v1/drivers", {
+        params: {
+          session_key: sessionKey,
+          driver_number: driverNumber,
+        },
+      }),
+      openf1Get("https://api.openf1.org/v1/laps", {
+        params: {
+          session_key: sessionKey,
+          driver_number: driverNumber,
+        },
+      }),
+    ]);
+
+    const driver = (driverResp.data || [])[0] || null;
+    const laps = lapsResp.data || [];
+
+    const latestLap =
+      laps
+        .filter((lap) => lap.lap_number != null)
+        .sort((a, b) => Number(b.lap_number) - Number(a.lap_number))[0] || null;
+
+    return res.json({
+      ok: true,
+      driver,
+      latestLap,
+    });
+  } catch (err) {
+    console.error("[DRIVER DETAILS ERROR]", err.message);
+    console.error("Status:", err.response?.status);
+    console.error("Data:", err.response?.data);
+
+    return res.status(500).json({
+      ok: false,
+      error: err.message,
+      status: err.response?.status || null,
+      details: err.response?.data || null,
+    });
+  }
+});

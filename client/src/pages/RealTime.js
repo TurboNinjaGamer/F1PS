@@ -574,19 +574,24 @@ function TrackMap({ points, circuitImage, selectedDriverNumber, onSelectDriver }
 
 
 
+function formatLapTime(seconds) {
+  if (seconds == null) return "—";
+
+  const totalMs = Math.round(Number(seconds) * 1000);
+  const mins = Math.floor(totalMs / 60000);
+  const secs = Math.floor((totalMs % 60000) / 1000);
+  const ms = totalMs % 1000;
+
+  return `${mins}:${String(secs).padStart(2, "0")}.${String(ms).padStart(3, "0")}`;
+}
+
 function DriverDetails({
   selectedDriverNumber,
   tower,
-  points,
-  frameDate,
+  driverDetails,
 }) {
   const towerRow =
     (tower || []).find(
-      (row) => Number(row.driver_number) === Number(selectedDriverNumber)
-    ) || null;
-
-  const pointRow =
-    (points || []).find(
       (row) => Number(row.driver_number) === Number(selectedDriverNumber)
     ) || null;
 
@@ -610,6 +615,10 @@ function DriverDetails({
     );
   }
 
+  const driver = driverDetails?.driver || null;
+  const latestLap = driverDetails?.latestLap || null;
+  const teamColor = driver?.team_colour ? `#${driver.team_colour}` : "#151922";
+
   return (
     <div
       style={{
@@ -625,32 +634,67 @@ function DriverDetails({
 
       <div
         style={{
-          fontSize: 28,
-          fontWeight: 900,
-          marginBottom: 10,
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          marginBottom: 18,
+          paddingBottom: 14,
+          borderBottom: "1px solid rgba(0,0,0,0.08)",
         }}
       >
-        {getDriverCode(selectedDriverNumber)}
+        {driver?.headshot_url ? (
+          <img
+            src={driver.headshot_url}
+            alt={driver.full_name || getDriverCode(selectedDriverNumber)}
+            style={{
+              width: 72,
+              height: 72,
+              objectFit: "cover",
+              borderRadius: "50%",
+              border: `3px solid ${teamColor}`,
+              background: "#f3f3f3",
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: "50%",
+              background: "#f3f3f3",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontWeight: 900,
+              fontSize: 20,
+              border: `3px solid ${teamColor}`,
+            }}
+          >
+            {getDriverCode(selectedDriverNumber)}
+          </div>
+        )}
+
+        <div>
+          <div style={{ fontSize: 24, fontWeight: 900, lineHeight: 1.1 }}>
+            {driver?.full_name || getDriverCode(selectedDriverNumber)}
+          </div>
+          <div style={{ marginTop: 6, opacity: 0.75, fontWeight: 700 }}>
+            {driver?.team_name || "—"}
+          </div>
+        </div>
       </div>
 
+      <InfoRow label="Acronym" value={driver?.name_acronym || getDriverCode(selectedDriverNumber)} />
       <InfoRow label="Driver Number" value={`#${selectedDriverNumber}`} />
-      <InfoRow label="Position" value={towerRow?.position ?? "—"} />
-      <InfoRow
-        label="Track X"
-        value={pointRow?.x != null ? Math.round(pointRow.x) : "—"}
-      />
-      <InfoRow
-        label="Track Y"
-        value={pointRow?.y != null ? Math.round(pointRow.y) : "—"}
-      />
-      <InfoRow
-        label="Track Z"
-        value={pointRow?.z != null ? Math.round(pointRow.z) : "—"}
-      />
-      <InfoRow
-        label="Frame Time"
-        value={frameDate ? new Date(frameDate).toLocaleString() : "—"}
-      />
+      <InfoRow label="Current Position" value={towerRow?.position ?? "—"} />
+      <InfoRow label="Latest Lap" value={latestLap?.lap_number ?? "—"} />
+      <InfoRow label="Lap Time" value={formatLapTime(latestLap?.lap_duration)} />
+      <InfoRow label="Sector 1" value={formatLapTime(latestLap?.duration_sector_1)} />
+      <InfoRow label="Sector 2" value={formatLapTime(latestLap?.duration_sector_2)} />
+      <InfoRow label="Sector 3" value={formatLapTime(latestLap?.duration_sector_3)} />
+      <InfoRow label="I1 Speed" value={latestLap?.i1_speed != null ? `${latestLap.i1_speed} km/h` : "—"} />
+      <InfoRow label="I2 Speed" value={latestLap?.i2_speed != null ? `${latestLap.i2_speed} km/h` : "—"} />
+      <InfoRow label="ST Speed" value={latestLap?.st_speed != null ? `${latestLap.st_speed} km/h` : "—"} />
     </div>
   );
 }
@@ -679,7 +723,14 @@ export default function RealTime() {
   const [trackOutlineRows, setTrackOutlineRows] = useState([]);
 
   const [showReplayTests, setShowReplayTests] = useState(true);
+
   const [selectedDriverNumber, setSelectedDriverNumber] = useState(null);
+
+  const [driverDetails, setDriverDetails] = useState(null);
+
+  const currentSessionKey = showReplayTests
+  ? 11234
+  : data?.liveSession?.session_key || null;
 
   useEffect(() => {
     setErr("");
@@ -875,6 +926,34 @@ export default function RealTime() {
     };
   }, [data?.mode, showReplayTests]);
 
+
+
+  useEffect(() => {
+  if (!selectedDriverNumber || !currentSessionKey) {
+    setDriverDetails(null);
+    return;
+  }
+
+  authFetch(
+    `/api/realtime/driver-details?session_key=${currentSessionKey}&driver_number=${selectedDriverNumber}`
+  )
+    .then((r) => r.json())
+    .then((j) => {
+      if (j.ok) {
+        setDriverDetails(j);
+      } else {
+        setDriverDetails(null);
+      }
+    })
+    .catch(() => {
+      setDriverDetails(null);
+    });
+}, [selectedDriverNumber, currentSessionKey]);
+
+
+
+
+
   return (
     <div style={{ padding: "16px 18px" }}>
       <h2>Real Time</h2>
@@ -1005,11 +1084,10 @@ export default function RealTime() {
 
 <div style={{ marginTop: 16 }}>
   <DriverDetails
-    selectedDriverNumber={selectedDriverNumber}
-    tower={towerData}
-    points={trackPoints}
-    frameDate={trackReplayFrameDate}
-  />
+  selectedDriverNumber={selectedDriverNumber}
+  tower={towerData}
+  driverDetails={driverDetails}
+/>
 </div>
           </div>
         </>
@@ -1334,34 +1412,45 @@ export default function RealTime() {
       )}
 
       {!showReplayTests && data?.mode === "live-session" && (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "320px 1fr 360px",
-            gap: 16,
-            alignItems: "start",
-            marginTop: 20,
-          }}
-        >
-          <PositionTower
-  tower={towerData}
-  selectedDriverNumber={selectedDriverNumber}
-  onSelectDriver={setSelectedDriverNumber}
-/>
-          <TrackMap
-  points={trackPoints}
-  circuitImage={data?.meeting?.circuit_image}
-  selectedDriverNumber={selectedDriverNumber}
-  onSelectDriver={setSelectedDriverNumber}
-/>
-          <DriverDetails
-  selectedDriverNumber={selectedDriverNumber}
-  tower={towerData}
-  points={trackPoints}
-  frameDate={null}
-/>
-        </div>
-      )}
+  <div
+    style={{
+      display: "grid",
+      gridTemplateColumns:
+        window.innerWidth > 1400
+          ? "300px minmax(0, 1fr) 340px"
+          : "1fr",
+      gap: 16,
+      alignItems: "start",
+      marginTop: 20,
+      width: "100%",
+    }}
+  >
+    <div style={{ minWidth: 0 }}>
+      <PositionTower
+        tower={towerData}
+        selectedDriverNumber={selectedDriverNumber}
+        onSelectDriver={setSelectedDriverNumber}
+      />
+    </div>
+
+    <div style={{ minWidth: 0 }}>
+      <TrackMap
+        points={trackPoints}
+        circuitImage={data?.meeting?.circuit_image}
+        selectedDriverNumber={selectedDriverNumber}
+        onSelectDriver={setSelectedDriverNumber}
+      />
+    </div>
+
+    <div style={{ minWidth: 0 }}>
+      <DriverDetails
+        selectedDriverNumber={selectedDriverNumber}
+        tower={towerData}
+        driverDetails={driverDetails}
+      />
+    </div>
+  </div>
+)}
     </div>
   );
 }

@@ -160,7 +160,7 @@ function buildTrackReplayFrames(rows) {
   return frames;
 }
 
-function PositionTower({ tower, frameDate }) {
+function PositionTower({ tower, frameDate, selectedDriverNumber, onSelectDriver }) {
   return (
     <div
       style={{
@@ -186,18 +186,26 @@ function PositionTower({ tower, frameDate }) {
         <div style={{ display: "grid", gap: 8 }}>
           {tower.map((row) => (
             <div
-              key={row.driver_number}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "44px 1fr 60px",
-                alignItems: "center",
-                gap: 10,
-                padding: "10px 12px",
-                borderRadius: 10,
-                background: "#f5f5f5",
-                border: "1px solid rgba(0,0,0,0.06)",
-              }}
-            >
+  key={row.driver_number}
+  onClick={() => onSelectDriver?.(row.driver_number)}
+  style={{
+    display: "grid",
+    gridTemplateColumns: "44px 1fr 60px",
+    alignItems: "center",
+    gap: 10,
+    padding: "10px 12px",
+    borderRadius: 10,
+    background:
+      Number(selectedDriverNumber) === Number(row.driver_number)
+        ? "#e9eefc"
+        : "#f5f5f5",
+    border:
+      Number(selectedDriverNumber) === Number(row.driver_number)
+        ? "1px solid #4c6fff"
+        : "1px solid rgba(0,0,0,0.06)",
+    cursor: "pointer",
+  }}
+>
               <div style={{ fontWeight: 900, fontSize: 18 }}>{row.position}</div>
 
               <div style={{ fontWeight: 800 }}>{getDriverCode(row.driver_number)}</div>
@@ -359,7 +367,7 @@ function normalizeTrackPointsWithTransform(points, transform) {
 
 
 
-function TrackMapTest({ points, frameDate, outlineRows }) {
+function TrackMapTest({ points, frameDate, outlineRows, selectedDriverNumber, onSelectDriver }) {
   const width = 700;
   const height = 500;
   const pad = 24;
@@ -434,19 +442,31 @@ function TrackMapTest({ points, frameDate, outlineRows }) {
             )}
 
             {normalizedCars.map((p) => (
-              <g key={p.driver_number} transform={`translate(${p.renderX}, ${p.renderY})`}>
-                <circle r="10" fill="#151922" />
-                <text
-                  x="0"
-                  y="4"
-                  textAnchor="middle"
-                  fontSize="10"
-                  fontWeight="700"
-                  fill="#ffffff"
-                >
-                  {getDriverCode(p.driver_number)}
-                </text>
-              </g>
+              <g
+  key={p.driver_number}
+  transform={`translate(${p.renderX}, ${p.renderY})`}
+  onClick={() => onSelectDriver?.(p.driver_number)}
+  style={{ cursor: "pointer" }}
+>
+  <circle
+    r={Number(selectedDriverNumber) === Number(p.driver_number) ? "13" : "10"}
+    fill={
+      Number(selectedDriverNumber) === Number(p.driver_number)
+        ? "#4c6fff"
+        : "#151922"
+    }
+  />
+  <text
+    x="0"
+    y="4"
+    textAnchor="middle"
+    fontSize="10"
+    fontWeight="700"
+    fill="#ffffff"
+  >
+    {getDriverCode(p.driver_number)}
+  </text>
+</g>
             ))}
           </svg>
         </div>
@@ -455,7 +475,7 @@ function TrackMapTest({ points, frameDate, outlineRows }) {
   );
 }
 
-function TrackMap({ points, circuitImage }) {
+function TrackMap({ points, circuitImage, selectedDriverNumber, onSelectDriver }) {
   const width = 700;
   const height = 500;
   const pad = 30;
@@ -520,21 +540,30 @@ function TrackMap({ points, circuitImage }) {
           >
             {normalized.map((p) => (
               <g
-                key={p.driver_number}
-                transform={`translate(${p.renderX}, ${p.renderY})`}
-              >
-                <circle r="10" fill="#151922" />
-                <text
-                  x="0"
-                  y="4"
-                  textAnchor="middle"
-                  fontSize="10"
-                  fontWeight="700"
-                  fill="#ffffff"
-                >
-                  {getDriverCode(p.driver_number)}
-                </text>
-              </g>
+  key={p.driver_number}
+  transform={`translate(${p.renderX}, ${p.renderY})`}
+  onClick={() => onSelectDriver?.(p.driver_number)}
+  style={{ cursor: "pointer" }}
+>
+  <circle
+    r={Number(selectedDriverNumber) === Number(p.driver_number) ? "13" : "10"}
+    fill={
+      Number(selectedDriverNumber) === Number(p.driver_number)
+        ? "#4c6fff"
+        : "#151922"
+    }
+  />
+  <text
+    x="0"
+    y="4"
+    textAnchor="middle"
+    fontSize="10"
+    fontWeight="700"
+    fill="#ffffff"
+  >
+    {getDriverCode(p.driver_number)}
+  </text>
+</g>
             ))}
           </svg>
         </div>
@@ -542,6 +571,94 @@ function TrackMap({ points, circuitImage }) {
     </div>
   );
 }
+
+
+
+function DriverDetails({
+  selectedDriverNumber,
+  tower,
+  points,
+  frameDate,
+}) {
+  const towerRow =
+    (tower || []).find(
+      (row) => Number(row.driver_number) === Number(selectedDriverNumber)
+    ) || null;
+
+  const pointRow =
+    (points || []).find(
+      (row) => Number(row.driver_number) === Number(selectedDriverNumber)
+    ) || null;
+
+  if (!selectedDriverNumber) {
+    return (
+      <div
+        style={{
+          border: "1px solid rgba(255,255,255,0.15)",
+          borderRadius: 12,
+          padding: 12,
+          background: "#ffffff",
+          color: "#111111",
+          minHeight: 500,
+        }}
+      >
+        <h3 style={{ marginTop: 0 }}>Driver Details</h3>
+        <div style={{ opacity: 0.7 }}>
+          Select a driver from the position tower or track map.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        border: "1px solid rgba(255,255,255,0.15)",
+        borderRadius: 12,
+        padding: 12,
+        background: "#ffffff",
+        color: "#111111",
+        minHeight: 500,
+      }}
+    >
+      <h3 style={{ marginTop: 0 }}>Driver Details</h3>
+
+      <div
+        style={{
+          fontSize: 28,
+          fontWeight: 900,
+          marginBottom: 10,
+        }}
+      >
+        {getDriverCode(selectedDriverNumber)}
+      </div>
+
+      <InfoRow label="Driver Number" value={`#${selectedDriverNumber}`} />
+      <InfoRow label="Position" value={towerRow?.position ?? "—"} />
+      <InfoRow
+        label="Track X"
+        value={pointRow?.x != null ? Math.round(pointRow.x) : "—"}
+      />
+      <InfoRow
+        label="Track Y"
+        value={pointRow?.y != null ? Math.round(pointRow.y) : "—"}
+      />
+      <InfoRow
+        label="Track Z"
+        value={pointRow?.z != null ? Math.round(pointRow.z) : "—"}
+      />
+      <InfoRow
+        label="Frame Time"
+        value={frameDate ? new Date(frameDate).toLocaleString() : "—"}
+      />
+    </div>
+  );
+}
+
+
+
+
+
 
 export default function RealTime() {
   const [data, setData] = useState(null);
@@ -562,6 +679,7 @@ export default function RealTime() {
   const [trackOutlineRows, setTrackOutlineRows] = useState([]);
 
   const [showReplayTests, setShowReplayTests] = useState(true);
+  const [selectedDriverNumber, setSelectedDriverNumber] = useState(null);
 
   useEffect(() => {
     setErr("");
@@ -823,7 +941,12 @@ export default function RealTime() {
               </div>
             </div>
 
-            <PositionTower tower={towerData} frameDate={replayFrameDate} />
+            <PositionTower
+              tower={towerData}
+              frameDate={replayFrameDate}
+              selectedDriverNumber={selectedDriverNumber}
+              onSelectDriver={setSelectedDriverNumber}  
+            />
           </div>
 
           <div style={{ marginTop: 20, marginBottom: 20 }}>
@@ -876,7 +999,18 @@ export default function RealTime() {
   points={trackPoints}
   frameDate={trackReplayFrameDate}
   outlineRows={trackOutlineRows}
+  selectedDriverNumber={selectedDriverNumber}
+  onSelectDriver={setSelectedDriverNumber}
 />
+
+<div style={{ marginTop: 16 }}>
+  <DriverDetails
+    selectedDriverNumber={selectedDriverNumber}
+    tower={towerData}
+    points={trackPoints}
+    frameDate={trackReplayFrameDate}
+  />
+</div>
           </div>
         </>
       )}
@@ -1209,23 +1343,23 @@ export default function RealTime() {
             marginTop: 20,
           }}
         >
-          <PositionTower tower={towerData} />
+          <PositionTower
+  tower={towerData}
+  selectedDriverNumber={selectedDriverNumber}
+  onSelectDriver={setSelectedDriverNumber}
+/>
           <TrackMap
-            points={trackPoints}
-            circuitImage={data?.meeting?.circuit_image}
-          />
-          <div
-            style={{
-              border: "1px solid rgba(255,255,255,0.15)",
-              borderRadius: 12,
-              padding: 12,
-              background: "#ffffff",
-              color: "#111111",
-              minHeight: 500,
-            }}
-          >
-            <h3>Driver Details</h3>
-          </div>
+  points={trackPoints}
+  circuitImage={data?.meeting?.circuit_image}
+  selectedDriverNumber={selectedDriverNumber}
+  onSelectDriver={setSelectedDriverNumber}
+/>
+          <DriverDetails
+  selectedDriverNumber={selectedDriverNumber}
+  tower={towerData}
+  points={trackPoints}
+  frameDate={null}
+/>
         </div>
       )}
     </div>

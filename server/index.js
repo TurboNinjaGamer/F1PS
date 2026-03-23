@@ -1356,3 +1356,24 @@ router.get("/realtime/driver-details", async (req, res) => {
     });
   }
 });
+
+
+
+
+
+router.get("/realtime/drivers", async (req, res) => {
+  try {
+    const sessionKey = Number(req.query.session_key);
+
+    const resp = await openf1Get("https://api.openf1.org/v1/drivers", {
+      params: { session_key: sessionKey },
+    });
+
+    return res.json({
+      ok: true,
+      drivers: resp.data || [],
+    });
+  } catch (err) {
+    return res.status(500).json({ ok: false });
+  }
+});

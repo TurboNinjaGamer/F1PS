@@ -160,7 +160,13 @@ function buildTrackReplayFrames(rows) {
   return frames;
 }
 
-function PositionTower({ tower, frameDate, selectedDriverNumber, onSelectDriver }) {
+function PositionTower({
+  tower,
+  frameDate,
+  selectedDriverNumber,
+  onSelectDriver,
+  driversMap,
+}) {
   return (
     <div
       style={{
@@ -180,39 +186,69 @@ function PositionTower({ tower, frameDate, selectedDriverNumber, onSelectDriver 
         </div>
       )}
 
-      {!tower?.length && <div style={{ opacity: 0.7 }}>No position data yet.</div>}
+      {!tower?.length && (
+        <div style={{ opacity: 0.7 }}>No position data yet.</div>
+      )}
 
       {!!tower?.length && (
         <div style={{ display: "grid", gap: 8 }}>
-          {tower.map((row) => (
-            <div
-  key={row.driver_number}
-  onClick={() => onSelectDriver?.(row.driver_number)}
-  style={{
-    display: "grid",
-    gridTemplateColumns: "44px 1fr 60px",
-    alignItems: "center",
-    gap: 10,
-    padding: "10px 12px",
-    borderRadius: 10,
-    background:
-      Number(selectedDriverNumber) === Number(row.driver_number)
-        ? "#e9eefc"
-        : "#f5f5f5",
-    border:
-      Number(selectedDriverNumber) === Number(row.driver_number)
-        ? "1px solid #4c6fff"
-        : "1px solid rgba(0,0,0,0.06)",
-    cursor: "pointer",
-  }}
->
-              <div style={{ fontWeight: 900, fontSize: 18 }}>{row.position}</div>
+          {tower.map((row) => {
+            const driver = driversMap?.[row.driver_number];
+            const teamColor = driver?.team_colour
+              ? `#${driver.team_colour}`
+              : "#999999";
 
-              <div style={{ fontWeight: 800 }}>{getDriverCode(row.driver_number)}</div>
+            return (
+              <div
+                key={row.driver_number}
+                onClick={() => onSelectDriver?.(row.driver_number)}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "6px 44px 1fr 60px",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  background:
+                    Number(selectedDriverNumber) === Number(row.driver_number)
+                      ? "#e9eefc"
+                      : "#f5f5f5",
+                  border:
+                    Number(selectedDriverNumber) === Number(row.driver_number)
+                      ? "1px solid #4c6fff"
+                      : "1px solid rgba(0,0,0,0.06)",
+                  cursor: "pointer",
+                }}
+              >
+                <div
+                  style={{
+                    width: 6,
+                    height: "100%",
+                    borderRadius: 6,
+                    background: teamColor,
+                  }}
+                />
 
-              <div style={{ textAlign: "right", opacity: 0.75 }}>#{row.driver_number}</div>
-            </div>
-          ))}
+                <div
+                  style={{
+                    fontWeight: 900,
+                    fontSize: 18,
+                    textAlign: "center",
+                  }}
+                >
+                  {row.position}
+                </div>
+
+                <div style={{ fontWeight: 800 }}>
+                  {getDriverCode(row.driver_number)}
+                </div>
+
+                <div style={{ textAlign: "right", opacity: 0.75 }}>
+                  #{row.driver_number}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -367,7 +403,7 @@ function normalizeTrackPointsWithTransform(points, transform) {
 
 
 
-function TrackMapTest({ points, frameDate, outlineRows, selectedDriverNumber, onSelectDriver }) {
+function TrackMapTest({ points, frameDate, outlineRows, selectedDriverNumber, onSelectDriver, driversMap }) {
   const width = 700;
   const height = 500;
   const pad = 24;
@@ -441,33 +477,42 @@ function TrackMapTest({ points, frameDate, outlineRows, selectedDriverNumber, on
               />
             )}
 
-            {normalizedCars.map((p) => (
-              <g
-  key={p.driver_number}
-  transform={`translate(${p.renderX}, ${p.renderY})`}
-  onClick={() => onSelectDriver?.(p.driver_number)}
-  style={{ cursor: "pointer" }}
->
-  <circle
-    r={Number(selectedDriverNumber) === Number(p.driver_number) ? "13" : "10"}
-    fill={
-      Number(selectedDriverNumber) === Number(p.driver_number)
-        ? "#4c6fff"
-        : "#151922"
-    }
-  />
-  <text
-    x="0"
-    y="4"
-    textAnchor="middle"
-    fontSize="10"
-    fontWeight="700"
-    fill="#ffffff"
-  >
-    {getDriverCode(p.driver_number)}
-  </text>
-</g>
-            ))}
+            {normalizedCars.map((p) => {
+  const driver = driversMap?.[p.driver_number];
+  const teamColor = driver?.team_colour
+    ? `#${driver.team_colour}`
+    : "#151922";
+
+  const isSelected =
+    Number(selectedDriverNumber) === Number(p.driver_number);
+
+  return (
+    <g
+      key={p.driver_number}
+      transform={`translate(${p.renderX}, ${p.renderY})`}
+      onClick={() => onSelectDriver?.(p.driver_number)}
+      style={{ cursor: "pointer" }}
+    >
+      <circle
+        r={isSelected ? "13" : "10"}
+        fill={teamColor}
+        stroke={isSelected ? "#111111" : "#ffffff"}
+        strokeWidth={isSelected ? "3" : "2"}
+      />
+      <text
+        x="0"
+        y="4"
+        textAnchor="middle"
+        fontSize="10"
+        fontWeight="700"
+        fill="#ffffff"
+      >
+        {getDriverCode(p.driver_number)}
+      </text>
+    </g>
+  );
+})}
+
           </svg>
         </div>
       )}
@@ -475,7 +520,7 @@ function TrackMapTest({ points, frameDate, outlineRows, selectedDriverNumber, on
   );
 }
 
-function TrackMap({ points, circuitImage, selectedDriverNumber, onSelectDriver }) {
+function TrackMap({ points, circuitImage, selectedDriverNumber, onSelectDriver, driversMap }) {
   const width = 700;
   const height = 500;
   const pad = 30;
@@ -538,33 +583,41 @@ function TrackMap({ points, circuitImage, selectedDriverNumber, onSelectDriver }
               height: "100%",
             }}
           >
-            {normalized.map((p) => (
-              <g
-  key={p.driver_number}
-  transform={`translate(${p.renderX}, ${p.renderY})`}
-  onClick={() => onSelectDriver?.(p.driver_number)}
-  style={{ cursor: "pointer" }}
->
-  <circle
-    r={Number(selectedDriverNumber) === Number(p.driver_number) ? "13" : "10"}
-    fill={
-      Number(selectedDriverNumber) === Number(p.driver_number)
-        ? "#4c6fff"
-        : "#151922"
-    }
-  />
-  <text
-    x="0"
-    y="4"
-    textAnchor="middle"
-    fontSize="10"
-    fontWeight="700"
-    fill="#ffffff"
-  >
-    {getDriverCode(p.driver_number)}
-  </text>
-</g>
-            ))}
+            {normalized.map((p) => {
+  const driver = driversMap?.[p.driver_number];
+  const teamColor = driver?.team_colour
+    ? `#${driver.team_colour}`
+    : "#151922";
+
+  const isSelected =
+    Number(selectedDriverNumber) === Number(p.driver_number);
+
+  return (
+    <g
+      key={p.driver_number}
+      transform={`translate(${p.renderX}, ${p.renderY})`}
+      onClick={() => onSelectDriver?.(p.driver_number)}
+      style={{ cursor: "pointer" }}
+    >
+      <circle
+        r={isSelected ? "13" : "10"}
+        fill={teamColor}
+        stroke={isSelected ? "#111111" : "#ffffff"}
+        strokeWidth={isSelected ? "3" : "2"}
+      />
+      <text
+        x="0"
+        y="4"
+        textAnchor="middle"
+        fontSize="10"
+        fontWeight="700"
+        fill="#ffffff"
+      >
+        {getDriverCode(p.driver_number)}
+      </text>
+    </g>
+  );
+})}
           </svg>
         </div>
       )}
@@ -727,6 +780,8 @@ export default function RealTime() {
   const [selectedDriverNumber, setSelectedDriverNumber] = useState(null);
 
   const [driverDetails, setDriverDetails] = useState(null);
+
+  const [driversMap, setDriversMap] = useState({});
 
   const currentSessionKey = showReplayTests
   ? 11234
@@ -927,6 +982,25 @@ export default function RealTime() {
   }, [data?.mode, showReplayTests]);
 
 
+  useEffect(() => {
+  if (!currentSessionKey) return;
+
+  authFetch(`/api/realtime/drivers?session_key=${currentSessionKey}`)
+    .then((r) => r.json())
+    .then((j) => {
+      if (!j.ok) return;
+
+      const map = {};
+      (j.drivers || []).forEach((d) => {
+        map[d.driver_number] = d;
+      });
+
+      setDriversMap(map);
+    });
+}, [currentSessionKey]);
+
+
+
 
   useEffect(() => {
   if (!selectedDriverNumber || !currentSessionKey) {
@@ -1025,6 +1099,7 @@ export default function RealTime() {
               frameDate={replayFrameDate}
               selectedDriverNumber={selectedDriverNumber}
               onSelectDriver={setSelectedDriverNumber}  
+              driversMap={driversMap}
             />
           </div>
 
@@ -1080,6 +1155,7 @@ export default function RealTime() {
   outlineRows={trackOutlineRows}
   selectedDriverNumber={selectedDriverNumber}
   onSelectDriver={setSelectedDriverNumber}
+  driversMap={driversMap}
 />
 
 <div style={{ marginTop: 16 }}>
@@ -1439,6 +1515,7 @@ export default function RealTime() {
         circuitImage={data?.meeting?.circuit_image}
         selectedDriverNumber={selectedDriverNumber}
         onSelectDriver={setSelectedDriverNumber}
+        driversMap={driversMap}
       />
     </div>
 

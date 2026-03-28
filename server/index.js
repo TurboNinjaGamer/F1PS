@@ -21,21 +21,80 @@ const MIN_GAP_MS = 350;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function openf1Get(url, config) {
-  // obezbedi razmak između poziva
+
+let openf1AccessToken = null;
+let openf1TokenExpiresAt = 0;
+
+
+async function getOpenF1AccessToken() {
+  const now = Date.now();
+
+  if (openf1AccessToken && now < openf1TokenExpiresAt - 60_000) {
+    return openf1AccessToken;
+  }
+
+  const params = new URLSearchParams();
+  params.append("username", process.env.OPENF1_USERNAME);
+  params.append("password", process.env.OPENF1_PASSWORD);
+
+  const resp = await axios.post("https://api.openf1.org/token", params, {
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    timeout: 10000,
+  });
+
+  openf1AccessToken = resp.data.access_token;
+  openf1TokenExpiresAt = now + Number(resp.data.expires_in || 3600) * 1000;
+
+  return openf1AccessToken;
+}
+
+
+
+
+
+async function openf1Get(url, config = {}) {
   const now = Date.now();
   const wait = Math.max(0, MIN_GAP_MS - (now - lastOpenF1CallAt));
   if (wait) await sleep(wait);
   lastOpenF1CallAt = Date.now();
 
+  const token = await getOpenF1AccessToken();
+
+  const mergedConfig = {
+    timeout: 10000,
+    ...config,
+    headers: {
+      accept: "application/json",
+      ...(config.headers || {}),
+      Authorization: `Bearer ${token}`,
+    },
+  };
+
   try {
-    return await axios.get(url, config);
+    return await axios.get(url, mergedConfig);
   } catch (err) {
-    // retry na 429
+    if (err.response?.status === 401) {
+      openf1AccessToken = null;
+      openf1TokenExpiresAt = 0;
+
+      const freshToken = await getOpenF1AccessToken();
+
+      return await axios.get(url, {
+        ...mergedConfig,
+        headers: {
+          ...mergedConfig.headers,
+          Authorization: `Bearer ${freshToken}`,
+        },
+      });
+    }
+
     if (err.response?.status === 429) {
       await sleep(1200);
-      return await axios.get(url, config);
+      return await axios.get(url, mergedConfig);
     }
+
     throw err;
   }
 }

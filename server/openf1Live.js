@@ -44,8 +44,10 @@ async function connectOpenF1Live() {
   isConnecting = true;
 
   try {
-    const token = await getOpenF1Token();
-    const brokerUrl = process.env.OPENF1_WS_URL || "wss://mqtt.openf1.org:8084/mqtt";
+    // const token = await getOpenF1Token();
+    const token = "cb76bdd38a24629ef00b6ef566362de0adfbd493b7194f514fb024d7f9cbcca5";
+    // const brokerUrl = process.env.OPENF1_WS_URL || "wss://mqtt.openf1.org:8084/mqtt";
+    const brokerUrl = "wss://mqtt.telemetry.zone/ws";
 
     client = mqtt.connect(brokerUrl, {
       username: process.env.OPENF1_WS_USERNAME || process.env.OPENF1_USERNAME || "f1ps",

@@ -282,6 +282,7 @@ export function buildTrackOutline(rows, transform, outlineDriverNumber = 1) {
 }
 
 export function normalizeTrackPointsWithTransform(points, transform) {
+  // return points
   return (points || [])
     .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y))
     .map((p) => {

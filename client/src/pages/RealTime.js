@@ -52,6 +52,11 @@ export default function RealTime() {
           return;
         }
         setData(j);
+        console.log("REALTIME STATUS RESPONSE:", j);
+console.log("MODE:", j.mode);
+console.log("LIVE SESSION:", j.liveSession);
+console.log("MEETING:", j.meeting);
+console.log("NEXT SESSION:", j.nextSession);
         console.log("Pozvan sam u: " + j);
       })
       .catch((e) => setErr(String(e)));
@@ -784,7 +789,7 @@ export default function RealTime() {
           <div style={{ minWidth: 0 }}>
             <TrackMap
               points={trackPoints}
-              circuitImage={data?.meeting?.circuit_image}
+              circuitName={data?.meeting?.circuit_short_name}
               selectedDriverNumber={selectedDriverNumber}
               onSelectDriver={setSelectedDriverNumber}
               driversMap={driversMap}

@@ -881,6 +881,41 @@ router.get("/realtime/status", async (req, res) => {
     const year = Number(req.query.year || new Date().getFullYear());
     const now = Date.now();
 
+    // 1) PRVO proveri telemetry / playback sistem
+    try {
+      const telemetryResp = await axios.get(
+        "https://mqtt.telemetry.zone/api/status",
+        {
+          headers: {
+            "x-api-key": process.env.TELEMETRY_API_KEY,
+          },
+          timeout: 4000,
+        }
+      );
+
+      const telemetry = telemetryResp.data;
+
+      if (
+        telemetry?.ok &&
+        //telemetry?.active &&
+        //telemetry?.session &&
+        //telemetry?.meeting &&
+        telemetry?.replay.playing
+      ) {
+        return res.json({
+          ok: true,
+          mode: "live-session",
+          source: telemetry.source || "live",
+          meeting: telemetry.meeting,
+          liveSession: telemetry.session,
+        });
+      }
+    } catch (telemetryErr) {
+      console.warn("Telemetry status unavailable:", telemetryErr.message);
+      // Ne pucaj odmah — samo idi na fallback OpenF1 logiku
+    }
+
+    // 2) FALLBACK: stara OpenF1 logika
     const [meetingsResp, sessionsResp] = await Promise.all([
       openf1Get("https://api.openf1.org/v1/meetings", {
         params: { year },
@@ -911,6 +946,7 @@ router.get("/realtime/status", async (req, res) => {
       return res.json({
         ok: true,
         mode: "live-session",
+        source: "openf1",
         meeting,
         liveSession: activeSession,
       });
@@ -961,7 +997,6 @@ router.get("/realtime/status", async (req, res) => {
     });
   }
 });
-
 
 
 

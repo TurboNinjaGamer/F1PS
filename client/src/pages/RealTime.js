@@ -223,12 +223,12 @@ export default function RealTime() {
     .then((j) => {
       if (!cancelled && j.ok) {
         setTrackPoints(j.points || []);
-        setTrackMeta({
-          meeting: j.meeting || null,
-          liveSession: j.liveSession || null,
-          meeting_key: j.meeting_key || null,
-          session_key: j.session_key || null,
-        });
+        setTrackMeta((prev) => ({
+  meeting: j.meeting || prev?.meeting || null,
+  liveSession: j.liveSession || prev?.liveSession || null,
+  meeting_key: j.meeting_key || prev?.meeting_key || null,
+  session_key: j.session_key || prev?.session_key || null,
+}));
       }
     })
     .catch(() => {});

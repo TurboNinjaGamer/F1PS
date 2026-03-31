@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getDriverCode } from "../../utils/realtimeHelpers";
 
-function resolveTrackFile(circuitName) {
+function resolveTrackFile(circuitName, previousFileName) {
   const name = String(circuitName || "").toLowerCase().trim();
 
   if (name.includes("japan") || name.includes("suzuka")) {
@@ -16,7 +16,11 @@ function resolveTrackFile(circuitName) {
     return "Shanghai.svg";
   }
 
-  return "Suzuka.svg";
+  if(name.includes("australia") || name.includes("melbourne") || name.includes("australian grand prix")){
+    return "Melbourne.svg";
+  }
+
+  return previousFileName || null
 }
 
 function parseSvgTrack(svgText) {
@@ -64,6 +68,7 @@ export default function TrackMap({
 }) {
   const [trackData, setTrackData] = useState(null);
   const [trackError, setTrackError] = useState(null);
+  const [lastResolvedFile, setLastResolvedFile] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,8 +76,13 @@ export default function TrackMap({
     async function loadSvg() {
       setTrackError(null);
       setTrackData(null);
+      
 
-      const fileName = resolveTrackFile(circuitName);
+      const fileName = resolveTrackFile(circuitName, lastResolvedFile);
+
+if (!fileName) {
+  return;
+}
       const trackUrl = `/tracks/${fileName}`;
 
       console.log("TrackMap circuitName =", circuitName);
@@ -93,6 +103,7 @@ export default function TrackMap({
 
       if (!cancelled) {
         setTrackData(parsed);
+        setLastResolvedFile(fileName);
       }
     }
 

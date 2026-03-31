@@ -1,17 +1,114 @@
+import { useEffect, useState } from "react";
 import { getDriverCode } from "../../utils/realtimeHelpers";
+
+function resolveTrackFile(circuitName) {
+  const name = String(circuitName || "").toLowerCase().trim();
+
+  if (name.includes("japan") || name.includes("suzuka")) {
+    return "Suzuka.svg";
+  }
+
+  if (
+    name.includes("china") ||
+    name.includes("shanghai") ||
+    name.includes("chinese grand prix")
+  ) {
+    return "Shanghai.svg";
+  }
+
+  return "Suzuka.svg";
+}
+
+function parseSvgTrack(svgText) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(svgText, "image/svg+xml");
+  const svgEl = doc.querySelector("svg");
+
+  if (!svgEl) return null;
+
+  const viewBoxAttr = svgEl.getAttribute("viewBox") || "0 0 100 100";
+  const [minX, minY, width, height] = viewBoxAttr.split(/\s+/).map(Number);
+
+  const paths = [...svgEl.querySelectorAll("path")].map((p, index) => ({
+    id: p.id || `path-${index}`,
+    d: p.getAttribute("d") || "",
+    stroke: p.getAttribute("stroke") || "#999",
+    strokeWidth:
+      p.getAttribute("stroke-width") ||
+      p.getAttribute("strokeWidth") ||
+      "20",
+    fill: p.getAttribute("fill") || "none",
+    opacity: p.getAttribute("opacity") || "1",
+    strokeLinecap:
+      p.getAttribute("stroke-linecap") ||
+      p.getAttribute("strokeLinecap") ||
+      "round",
+    strokeLinejoin:
+      p.getAttribute("stroke-linejoin") ||
+      p.getAttribute("strokeLinejoin") ||
+      "round",
+  }));
+
+  return {
+    viewBox: { minX, minY, width, height },
+    paths,
+  };
+}
 
 export default function TrackMap({
   points,
+  circuitName,
   selectedDriverNumber,
   onSelectDriver,
   driversMap,
 }) {
-  const viewBox = {
-    minX: -15134.95,
-    minY: -4457.95,
-    width: 22434.9,
-    height: 12802.9,
-  };
+  const [trackData, setTrackData] = useState(null);
+  const [trackError, setTrackError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSvg() {
+      setTrackError(null);
+      setTrackData(null);
+
+      const fileName = resolveTrackFile(circuitName);
+      const trackUrl = `/tracks/${fileName}`;
+
+      console.log("TrackMap circuitName =", circuitName);
+      console.log("TrackMap fileName =", fileName);
+      console.log("TrackMap url =", trackUrl);
+
+      const res = await fetch(trackUrl);
+      if (!res.ok) {
+        throw new Error(`Failed to load SVG: ${trackUrl}`);
+      }
+
+      const svgText = await res.text();
+      const parsed = parseSvgTrack(svgText);
+
+      if (!parsed) {
+        throw new Error(`Invalid SVG file: ${trackUrl}`);
+      }
+
+      if (!cancelled) {
+        setTrackData(parsed);
+      }
+    }
+
+    loadSvg().catch((err) => {
+      console.error(err);
+      if (!cancelled) {
+        setTrackError(err.message);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [circuitName]);
+
+  const viewBox = trackData?.viewBox;
 
   return (
     <div
@@ -24,13 +121,21 @@ export default function TrackMap({
         minHeight: 500,
       }}
     >
-      <h3 style={{ marginTop: 0 }}>Track Map</h3>
+      <h3 style={{ marginTop: 0 }}>
+        Track Map{circuitName ? ` · ${circuitName}` : ""}
+      </h3>
 
-      {!points?.length && (
+      {trackError && (
+        <div style={{ color: "#c62828", opacity: 0.9, marginBottom: 12 }}>
+          Failed to load track: {trackError}
+        </div>
+      )}
+
+      {!points?.length && !trackError && (
         <div style={{ opacity: 0.7 }}>No track position data yet.</div>
       )}
 
-      {!!points?.length && (
+      {!!points?.length && !!trackData && !!viewBox && (
         <div
           style={{
             position: "relative",
@@ -52,38 +157,19 @@ export default function TrackMap({
               display: "block",
             }}
           >
-            <path
-              id="sector1"
-              d="M1480,392 L1602,535 L1693,641 L1960,954 L2023,1027 L2237,1277 L2346,1404 L2499,1584 L2712,1831 L2915,2070 L3018,2190 L3087,2271 L3191,2392 L3424,2664 L3588,2855 L3705,2993 L3802,3106 L4326,3725 L4455,3877 L4630,4082 L4770,4246 L5055,4580 L5214,4768 L5326,4901 L5371,4954 L5514,5123 L5723,5381 L5823,5522 L5885,5641 L5943,5832 L5962,6059 L5941,6223 L5903,6383 L5877,6475 L5832,6614 L5756,6760 L5652,6872 L5523,6950 L5412,6988 L5279,7007 L5175,7006 L5157,7004 L5010,6972 L4848,6889 L4771,6825 L4728,6779 L4618,6631 L4522,6479 L4441,6341 L4360,6196 L4312,6111 L4233,5972 L4176,5875 L4100,5759 L4071,5717 L3971,5583 L3825,5420 L3678,5298 L3590,5245 L3462,5190 L3311,5154 L3196,5141 L3025,5130 L2909,5118 L2716,5066 L2562,4980 L2430,4863 L2362,4777 L2299,4657 L2258,4538 L2230,4440 L2206,4355 L2148,4153 L2114,4033 L2044,3851 L1979,3753 L1816,3593 L1581,3465 L1397,3420 L1252,3407 L1000,3392 L856,3378 L739,3354 L472,3236 L369,3162 L276,3078 L196,2988 L146,2917 L103,2843 L77,2785 L32,2527 L42,2441 L92,2281 L127,2195 L191,2040 L249,1895 L302,1761 L369,1548 L380,1420 L327,1176 L198,967 L11,802 L-164,710 L-250,671 L-372,615 L-534,546 L-828,459 L-1012,426 L-1288,399 L-1436,398 L-1678,411 L-1870,445 L-2047,502 L-2221,572 L-2375,648 L-2512,724 L-2667,825 L-2789,924 L-2921,1057 L-3002,1154 L-3078,1257 L-3173,1384 L-3324,1585 L-3428,1723 L-3447,1748"
-              fill="none"
-              stroke="#e8313a"
-              strokeWidth="350"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              opacity="0.85"
-            />
-
-            <path
-              id="sector2"
-              d="M-3447,1748 L-3660,2013 L-3882,2274 L-3969,2352 L-4126,2420 L-4315,2455 L-4516,2489 L-4676,2516 L-4834,2540 L-5005,2564 L-5127,2572 L-5341,2561 L-5513,2514 L-5635,2408 L-5709,2272 L-5745,2145 L-5769,1960 L-5790,1791 L-5819,1656 L-5841,1558 L-5964,990 L-5991,864 L-6013,762 L-6041,633 L-6063,529 L-6094,385 L-6126,226 L-6161,52 L-6202,-177 L-6219,-286 L-6235,-475 L-6213,-715 L-6175,-871 L-6095,-1081 L-6040,-1203 L-5989,-1308 L-5929,-1435 L-5922,-1450 L-5890,-1532 L-5863,-1638 L-5861,-1734 L-5886,-1813 L-5916,-1857 L-5972,-1905 L-6008,-1922 L-6068,-1933 L-6111,-1932 L-6164,-1919 L-6206,-1900 L-6231,-1884 L-6262,-1859 L-6349,-1751 L-6368,-1718 L-6409,-1641 L-6435,-1589 L-6475,-1512 L-6519,-1430 L-6598,-1289 L-6687,-1142 L-6781,-996 L-6876,-851 L-7027,-630 L-7153,-469 L-7291,-326 L-7448,-193 L-7562,-112 L-7670,-47 L-7772,0 L-7895,43 L-8084,83 L-8341,114 L-8619,130 L-8804,125 L-8929,114 L-9102,91 L-9273,57 L-9428,18 L-9614,-37 L-9858,-123 L-9995,-175 L-10130,-229 L-10337,-320 L-10581,-458 L-10728,-559 L-10903,-697 L-11008,-794 L-11118,-908 L-11210,-1017 L-11349,-1207 L-11438,-1354 L-11571,-1637 L-11620,-1751 L-11667,-1863 L-11766,-2098 L-11812,-2206 L-11864,-2325 L-11966,-2532 L-12093,-2767 L-12211,-2923 L-12372,-3044 L-12475,-3090 L-13038,-3120 L-13149,-3102 L-13358,-3042 L-13534,-2955 L-13647,-2860 L-13695,-2799 L-13766,-2652 L-13793,-2526 L-13797,-2424 L-13786,-2330 L-13760,-2227 L-13733,-2152 L-13660,-2006 L-13546,-1849 L-13485,-1781 L-13340,-1642 L-13285,-1594 L-13177,-1507 L-13082,-1435 L-12986,-1363 L-12888,-1291 L-12730,-1177 L-12552,-1053 L-12416,-964 L-12185,-818 L-12159,-801 L-11917,-657 L-11707,-539 L-11521,-438 L-11302,-322 L-11123,-231 L-10832,-93 L-10516,42 L-10187,167 L-9972,243 L-9772,312 L-9589,374 L-9372,447 L-9138,526 L-8887,611 L-8602,706 L-8302,807 L-8036,896 L-7782,981 L-7650,1026"
-              fill="none"
-              stroke="#f5c542"
-              strokeWidth="350"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              opacity="0.85"
-            />
-
-            <path
-              id="sector3"
-              d="M-7650,1026 L-7485,1081 L-7304,1142 L-7059,1225 L-6781,1318 L-6634,1367 L-6521,1405 L-6391,1448 L-6119,1540 L-5960,1593 L-5817,1642 L-5691,1684 L-5493,1742 L-5343,1756 L-5058,1708 L-4929,1665 L-4560,1514 L-4412,1440 L-4194,1314 L-4104,1256 L-3890,1106 L-3769,1013 L-3620,883 L-3564,832 L-3387,667 L-3245,533 L-3148,441 L-3052,348 L-2936,233 L-2853,148 L-2665,-39 L-2564,-141 L-2480,-224 L-2396,-304 L-2291,-393 L-2224,-440 L-2138,-484 L-2086,-505 L-2017,-524 L-1940,-535 L-1864,-531 L-1814,-517 L-1728,-462 L-1666,-406 L-1628,-376 L-1565,-341 L-1463,-322 L-1402,-325 L-1353,-334 L-1249,-380 L-1191,-423 L-1152,-458 L-1037,-569 L-914,-666 L-760,-745 L-733,-754 L-564,-785 L-454,-791 L-316,-788 L-258,-783 L-31,-742 L220,-662 L423,-575 L516,-524 L631,-453 L822,-312 L945,-199 L1112,-32 L1218,83 L1326,210 L1563,489 L1659,602 L1795,760 L1911,896 L1480,392"
-              fill="none"
-              stroke="#4a90d9"
-              strokeWidth="350"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              opacity="0.85"
-            />
+            {trackData.paths.map((path) => (
+              <path
+                key={path.id}
+                id={path.id}
+                d={path.d}
+                fill={path.fill}
+                stroke={path.stroke}
+                strokeWidth={path.strokeWidth}
+                strokeLinecap={path.strokeLinecap}
+                strokeLinejoin={path.strokeLinejoin}
+                opacity={path.opacity}
+              />
+            ))}
 
             {points.map((p) => {
               const driver = driversMap?.[p.driver_number];

@@ -874,6 +874,161 @@ router.get("/realtime/live-snapshot", async (req, res) => {
 
 
 
+async function getTelemetryStatusSnapshot() {
+  const resp = await axios.get("https://mqtt.telemetry.zone/api/status", {
+    headers: {
+      "x-api-key": process.env.TELEMETRY_API_KEY,
+    },
+    timeout: 4000,
+  });
+
+  return resp.data;
+}
+
+function normalizeMeeting(rawMeeting) {
+  if (!rawMeeting) return null;
+
+  return {
+    meeting_key:
+      rawMeeting.meeting_key ??
+      rawMeeting.key ??
+      null,
+
+    meeting_name:
+      rawMeeting.meeting_name ??
+      rawMeeting.name ??
+      rawMeeting.meeting_official_name ??
+      rawMeeting.official_name ??
+      null,
+
+    meeting_official_name:
+      rawMeeting.meeting_official_name ??
+      rawMeeting.official_name ??
+      rawMeeting.meeting_name ??
+      rawMeeting.name ??
+      null,
+
+    country_name:
+      rawMeeting.country_name ??
+      rawMeeting.country ??
+      null,
+
+    country_code:
+      rawMeeting.country_code ??
+      rawMeeting.countryCode ??
+      null,
+
+    circuit_short_name:
+      rawMeeting.circuit_short_name ??
+      rawMeeting.circuit_name ??
+      rawMeeting.circuit ??
+      rawMeeting.track_name ??
+      null,
+
+    location:
+      rawMeeting.location ??
+      null,
+
+    date_start:
+      rawMeeting.date_start ??
+      rawMeeting.start_time ??
+      rawMeeting.start ??
+      null,
+
+    date_end:
+      rawMeeting.date_end ??
+      rawMeeting.end_time ??
+      rawMeeting.end ??
+      null,
+  };
+}
+
+function normalizeSession(rawSession) {
+  if (!rawSession) return null;
+
+  return {
+    session_key:
+      rawSession.session_key ??
+      rawSession.key ??
+      null,
+
+    meeting_key:
+      rawSession.meeting_key ??
+      rawSession.parent_meeting_key ??
+      null,
+
+    session_name:
+      rawSession.session_name ??
+      rawSession.name ??
+      null,
+
+    session_type:
+      rawSession.session_type ??
+      rawSession.type ??
+      null,
+
+    date_start:
+      rawSession.date_start ??
+      rawSession.start_time ??
+      rawSession.start ??
+      null,
+
+    date_end:
+      rawSession.date_end ??
+      rawSession.end_time ??
+      rawSession.end ??
+      null,
+  };
+}
+
+function buildTelemetryRealtimePayload(telemetry) {
+  const meeting = normalizeMeeting(telemetry?.meeting);
+  const liveSession = normalizeSession(telemetry?.session);
+  const replay = telemetry?.replay || null;
+
+  if (!telemetry?.ok) return null;
+
+  if (replay?.playing) {
+    return {
+      ok: true,
+      mode: "live-session",
+      source: telemetry?.source || "telemetry",
+      meeting,
+      liveSession,
+      telemetryReplay: replay,
+    };
+  }
+
+  if (meeting && liveSession) {
+    return {
+      ok: true,
+      mode: "live-session",
+      source: telemetry?.source || "telemetry",
+      meeting,
+      liveSession,
+      telemetryReplay: replay,
+    };
+  }
+
+  if (meeting) {
+    return {
+      ok: true,
+      mode: "next-session",
+      source: telemetry?.source || "telemetry",
+      meeting,
+      nextSession: liveSession,
+      telemetryReplay: replay,
+    };
+  }
+
+  return null;
+}
+
+
+
+
+
+
 
 
 router.get("/realtime/status", async (req, res) => {
@@ -881,41 +1036,19 @@ router.get("/realtime/status", async (req, res) => {
     const year = Number(req.query.year || new Date().getFullYear());
     const now = Date.now();
 
-    // 1) PRVO proveri telemetry / playback sistem
+    // 1) TELEMETRY FIRST
     try {
-      const telemetryResp = await axios.get(
-        "https://mqtt.telemetry.zone/api/status",
-        {
-          headers: {
-            "x-api-key": process.env.TELEMETRY_API_KEY,
-          },
-          timeout: 4000,
-        }
-      );
+      const telemetry = await getTelemetryStatusSnapshot();
+      const telemetryPayload = buildTelemetryRealtimePayload(telemetry);
 
-      const telemetry = telemetryResp.data;
-
-      if (
-        telemetry?.ok &&
-        //telemetry?.active &&
-        //telemetry?.session &&
-        //telemetry?.meeting &&
-        telemetry?.replay.playing
-      ) {
-        return res.json({
-          ok: true,
-          mode: "live-session",
-          source: telemetry.source || "live",
-          meeting: telemetry.meeting,
-          liveSession: telemetry.session,
-        });
+      if (telemetryPayload) {
+        return res.json(telemetryPayload);
       }
     } catch (telemetryErr) {
       console.warn("Telemetry status unavailable:", telemetryErr.message);
-      // Ne pucaj odmah — samo idi na fallback OpenF1 logiku
     }
 
-    // 2) FALLBACK: stara OpenF1 logika
+    // 2) OPENF1 FALLBACK
     const [meetingsResp, sessionsResp] = await Promise.all([
       openf1Get("https://api.openf1.org/v1/meetings", {
         params: { year },
@@ -947,8 +1080,8 @@ router.get("/realtime/status", async (req, res) => {
         ok: true,
         mode: "live-session",
         source: "openf1",
-        meeting,
-        liveSession: activeSession,
+        meeting: normalizeMeeting(meeting),
+        liveSession: normalizeSession(activeSession),
       });
     }
 
@@ -968,8 +1101,9 @@ router.get("/realtime/status", async (req, res) => {
       return res.json({
         ok: true,
         mode: "next-session",
-        meeting: activeMeeting,
-        nextSession,
+        source: "openf1",
+        meeting: normalizeMeeting(activeMeeting),
+        nextSession: normalizeSession(nextSession),
       });
     }
 
@@ -979,7 +1113,8 @@ router.get("/realtime/status", async (req, res) => {
     return res.json({
       ok: true,
       mode: "up-next",
-      nextMeeting,
+      source: "openf1",
+      nextMeeting: normalizeMeeting(nextMeeting),
     });
   } catch (err) {
     console.error("==== REALTIME STATUS ERROR ====");
@@ -1168,7 +1303,6 @@ router.get("/realtime/track-map", async (req, res) => {
     const status = getOpenF1LiveStatus();
 
     const rows = live.location || [];
-
     const latestByDriver = new Map();
 
     for (const row of rows) {
@@ -1197,11 +1331,42 @@ router.get("/realtime/track-map", async (req, res) => {
       }))
       .filter((row) => Number.isFinite(row.x) && Number.isFinite(row.y));
 
+    const sampleRow = points[0] || null;
+
+    let meeting = null;
+    let liveSession = null;
+
+    if (sampleRow?.meeting_key) {
+      try {
+        const meetingResp = await openf1Get("https://api.openf1.org/v1/meetings", {
+          params: { meeting_key: sampleRow.meeting_key },
+        });
+        meeting = (meetingResp.data || [])[0] || null;
+      } catch (err) {
+        console.warn("TRACK MAP meeting lookup failed:", err.message);
+      }
+    }
+
+    if (sampleRow?.session_key) {
+      try {
+        const sessionResp = await openf1Get("https://api.openf1.org/v1/sessions", {
+          params: { session_key: sampleRow.session_key },
+        });
+        liveSession = (sessionResp.data || [])[0] || null;
+      } catch (err) {
+        console.warn("TRACK MAP session lookup failed:", err.message);
+      }
+    }
+
     return res.json({
       ok: true,
       connected: status.connected,
       count: points.length,
       points,
+      meeting_key: sampleRow?.meeting_key || null,
+      session_key: sampleRow?.session_key || null,
+      meeting,
+      liveSession,
     });
   } catch (err) {
     console.error("==== TRACK MAP ERROR ====");
@@ -1397,6 +1562,63 @@ router.get("/realtime/test-track-outline", async (req, res) => {
 
 
 
+// router.get("/realtime/driver-details", async (req, res) => {
+//   try {
+//     const sessionKey = Number(req.query.session_key);
+//     const driverNumber = Number(req.query.driver_number);
+
+//     if (!sessionKey || !driverNumber) {
+//       return res.status(400).json({
+//         ok: false,
+//         error: "session_key and driver_number are required",
+//       });
+//     }
+
+//     const [driverResp, lapsResp] = await Promise.all([
+//       openf1Get("https://api.openf1.org/v1/drivers", {
+//         params: {
+//           session_key: sessionKey,
+//           driver_number: driverNumber,
+//         },
+//       }),
+//       openf1Get("https://api.openf1.org/v1/laps", {
+//         params: {
+//           session_key: sessionKey,
+//           driver_number: driverNumber,
+//         },
+//       }),
+//     ]);
+
+//     const driver = (driverResp.data || [])[0] || null;
+//     const laps = lapsResp.data || [];
+
+//     const latestLap =
+//       laps
+//         .filter((lap) => lap.lap_number != null)
+//         .sort((a, b) => Number(b.lap_number) - Number(a.lap_number))[0] || null;
+
+//     return res.json({
+//       ok: true,
+//       driver,
+//       latestLap,
+//     });
+//   } catch (err) {
+//     console.error("[DRIVER DETAILS ERROR]", err.message);
+//     console.error("Status:", err.response?.status);
+//     console.error("Data:", err.response?.data);
+
+//     return res.status(500).json({
+//       ok: false,
+//       error: err.message,
+//       status: err.response?.status || null,
+//       details: err.response?.data || null,
+//     });
+//   }
+// });
+
+
+
+
 router.get("/realtime/driver-details", async (req, res) => {
   try {
     const sessionKey = Number(req.query.session_key);
@@ -1409,22 +1631,13 @@ router.get("/realtime/driver-details", async (req, res) => {
       });
     }
 
-    const [driverResp, lapsResp] = await Promise.all([
-      openf1Get("https://api.openf1.org/v1/drivers", {
-        params: {
-          session_key: sessionKey,
-          driver_number: driverNumber,
-        },
-      }),
-      openf1Get("https://api.openf1.org/v1/laps", {
-        params: {
-          session_key: sessionKey,
-          driver_number: driverNumber,
-        },
-      }),
-    ]);
+    const lapsResp = await openf1Get("https://api.openf1.org/v1/laps", {
+      params: {
+        session_key: sessionKey,
+        driver_number: driverNumber,
+      },
+    });
 
-    const driver = (driverResp.data || [])[0] || null;
     const laps = lapsResp.data || [];
 
     const latestLap =
@@ -1434,7 +1647,6 @@ router.get("/realtime/driver-details", async (req, res) => {
 
     return res.json({
       ok: true,
-      driver,
       latestLap,
     });
   } catch (err) {
@@ -1450,6 +1662,8 @@ router.get("/realtime/driver-details", async (req, res) => {
     });
   }
 });
+
+
 
 
 

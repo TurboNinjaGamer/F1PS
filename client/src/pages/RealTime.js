@@ -13,6 +13,32 @@ import {
   buildTrackReplayFrames,
 } from "../utils/realtimeHelpers";
 
+function resolveMeeting(data) {
+  return data?.meeting || data?.nextMeeting || null;
+}
+
+function resolveSession(data) {
+  return data?.liveSession || data?.nextSession || null;
+}
+
+function resolveCircuitName(data) {
+  const candidates = [
+    data?.meeting?.circuit_short_name,
+    data?.meeting?.circuit_name,
+    data?.meeting?.track_name,
+    data?.meeting?.country_name,
+    data?.meeting?.meeting_name,
+
+    data?.nextMeeting?.circuit_short_name,
+    data?.nextMeeting?.circuit_name,
+    data?.nextMeeting?.track_name,
+    data?.nextMeeting?.country_name,
+    data?.nextMeeting?.meeting_name,
+  ];
+
+  return candidates.find((value) => typeof value === "string" && value.trim()) || "";
+}
+
 export default function RealTime() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
@@ -36,9 +62,30 @@ export default function RealTime() {
   const [driverDetails, setDriverDetails] = useState(null);
   const [driversMap, setDriversMap] = useState({});
 
+  const meeting = resolveMeeting(data);
+  const session = resolveSession(data);
+  
+
+  const [trackMeta, setTrackMeta] = useState(null);
+
+
+  const resolvedCircuitName =
+  trackMeta?.meeting?.circuit_short_name ||
+  trackMeta?.meeting?.country_name ||
+  trackMeta?.meeting?.meeting_name ||
+  data?.meeting?.circuit_short_name ||
+  data?.meeting?.country_name ||
+  data?.meeting?.meeting_name ||
+  data?.nextMeeting?.circuit_short_name ||
+  data?.nextMeeting?.country_name ||
+  data?.nextMeeting?.meeting_name ||
+  "";
+
+
+
   const currentSessionKey = showReplayTests
     ? 11234
-    : data?.liveSession?.session_key || null;
+    : session?.session_key || null;
 
   useEffect(() => {
     setErr("");
@@ -51,13 +98,15 @@ export default function RealTime() {
           setErr(j.error || "Error loading realtime status");
           return;
         }
+
         setData(j);
+
         console.log("REALTIME STATUS RESPONSE:", j);
-console.log("MODE:", j.mode);
-console.log("LIVE SESSION:", j.liveSession);
-console.log("MEETING:", j.meeting);
-console.log("NEXT SESSION:", j.nextSession);
-        console.log("Pozvan sam u: " + j);
+        console.log("MODE:", j.mode);
+        console.log("LIVE SESSION:", j.liveSession);
+        console.log("MEETING:", j.meeting);
+        console.log("NEXT SESSION:", j.nextSession);
+        console.log("NEXT MEETING:", j.nextMeeting);
       })
       .catch((e) => setErr(String(e)));
   }, []);
@@ -158,23 +207,6 @@ console.log("NEXT SESSION:", j.nextSession);
     setTrackReplayFrameDate(frame.date);
   }, [showReplayTests, trackReplayIndex, trackReplayFrames]);
 
- /* useEffect(() => {
-    if (!showReplayTests) return;
-
-    authFetch("/api/realtime/test-track-outline?session_key=11234&driver_number=1")
-      .then((r) => r.json())
-      .then((j) => {
-        console.log("TEST TRACK OUTLINE RESPONSE:", j);
-
-        if (j.ok) {
-          setTrackOutlineRows(j.rows || []);
-        }
-      })
-      .catch((e) => {
-        console.error("TEST TRACK OUTLINE FETCH ERROR:", e);
-      });
-  }, [showReplayTests]); */
-
   useEffect(() => {
     if (showReplayTests) return;
 
@@ -186,15 +218,21 @@ console.log("NEXT SESSION:", j.nextSession);
     let cancelled = false;
 
     const loadTrackMap = () => {
-      authFetch("/api/realtime/track-map")
-        .then((r) => r.json())
-        .then((j) => {
-          if (!cancelled && j.ok) {
-            setTrackPoints(j.points || []);
-          }
-        })
-        .catch(() => {});
-    };
+  authFetch("/api/realtime/track-map")
+    .then((r) => r.json())
+    .then((j) => {
+      if (!cancelled && j.ok) {
+        setTrackPoints(j.points || []);
+        setTrackMeta({
+          meeting: j.meeting || null,
+          liveSession: j.liveSession || null,
+          meeting_key: j.meeting_key || null,
+          session_key: j.session_key || null,
+        });
+      }
+    })
+    .catch(() => {});
+};
 
     loadTrackMap();
     const id = setInterval(loadTrackMap, 2000);
@@ -206,34 +244,27 @@ console.log("NEXT SESSION:", j.nextSession);
   }, [data?.mode, showReplayTests]);
 
   useEffect(() => {
-  const sessionKey = showReplayTests
-    ? 11234
-    : data?.liveSession?.session_key;
+    const sessionKey = showReplayTests ? 11234 : session?.session_key;
 
-  if (!sessionKey) return;
+    if (!sessionKey) return;
 
-  authFetch(
-    `/api/realtime/test-track-outline?session_key=${sessionKey}&driver_number=1`
-  )
-    .then((r) => r.json())
-    .then((j) => {
-      console.log("OUTLINE RESPONSE:", j);
+    authFetch(
+      `/api/realtime/test-track-outline?session_key=${sessionKey}&driver_number=1`
+    )
+      .then((r) => r.json())
+      .then((j) => {
+        console.log("OUTLINE RESPONSE:", j);
 
-      // ✅ prihvati samo VALIDAN outline
-      if (j.ok && Array.isArray(j.rows) && j.rows.length > 200) {
-        setTrackOutlineRows(j.rows);
-      } else {
-        console.warn(
-          "Ignoring invalid outline response",
-          j?.rows?.length
-        );
-      }
-    })
-    .catch((e) => {
-      console.error("TRACK OUTLINE FETCH ERROR:", e);
-      // ❗ ništa ne radimo → zadržavamo stari outline
-    });
-}, [showReplayTests, data?.liveSession?.session_key]);
+        if (j.ok && Array.isArray(j.rows) && j.rows.length > 200) {
+          setTrackOutlineRows(j.rows);
+        } else {
+          console.warn("Ignoring invalid outline response", j?.rows?.length);
+        }
+      })
+      .catch((e) => {
+        console.error("TRACK OUTLINE FETCH ERROR:", e);
+      });
+  }, [showReplayTests, session?.session_key]);
 
   useEffect(() => {
     if (showReplayTests) return;
@@ -265,6 +296,10 @@ console.log("NEXT SESSION:", j.nextSession);
     };
   }, [data?.mode, showReplayTests]);
 
+
+  
+
+
   useEffect(() => {
     if (!currentSessionKey) return;
 
@@ -294,15 +329,21 @@ console.log("NEXT SESSION:", j.nextSession);
       .then((r) => r.json())
       .then((j) => {
         if (j.ok) {
-          setDriverDetails(j);
+          setDriverDetails({
+            driver: driversMap?.[selectedDriverNumber] || null,
+            latestLap: j.latestLap || null,
+          });
         } else {
-          setDriverDetails(null);
+          setDriverDetails({
+            driver: driversMap?.[selectedDriverNumber] || null,
+            latestLap: null,
+          });
         }
       })
       .catch(() => {
         setDriverDetails(null);
       });
-  }, [selectedDriverNumber, currentSessionKey]);
+  }, [selectedDriverNumber, currentSessionKey, driversMap]);
 
   return (
     <div style={{ padding: "16px 18px" }}>
@@ -617,10 +658,10 @@ console.log("NEXT SESSION:", j.nextSession);
             >
               <div>
                 <div style={{ fontSize: 26, fontWeight: 900 }}>
-                  {data.meeting?.meeting_name || "Meeting in progress"}
+                  {meeting?.meeting_name || "Meeting in progress"}
                 </div>
                 <div style={{ opacity: 0.8, marginTop: 4 }}>
-                  {data.meeting?.meeting_official_name || "—"}
+                  {meeting?.meeting_official_name || "—"}
                 </div>
               </div>
 
@@ -660,53 +701,50 @@ console.log("NEXT SESSION:", j.nextSession);
                     Upcoming session
                   </div>
                   <div style={{ fontSize: 28, fontWeight: 900, marginBottom: 6 }}>
-                    {data.nextSession?.session_name || "—"}
+                    {session?.session_name || "—"}
                   </div>
                   <div style={{ fontSize: 15, opacity: 0.8 }}>
-                    {data.nextSession?.session_type || "—"}
+                    {session?.session_type || "—"}
                   </div>
                 </div>
 
                 <InfoRow
                   label="Session Start"
-                  value={formatDateTime(data.nextSession?.date_start)}
+                  value={formatDateTime(session?.date_start)}
                 />
                 <InfoRow
                   label="Session End"
-                  value={formatDateTime(data.nextSession?.date_end)}
+                  value={formatDateTime(session?.date_end)}
                 />
                 <InfoRow
                   label="Circuit"
-                  value={
-                    data.nextSession?.circuit_short_name ||
-                    data.meeting?.circuit_short_name
-                  }
+                  value={session?.circuit_short_name || meeting?.circuit_short_name}
                 />
                 <InfoRow
                   label="Location"
                   value={
-                    (data.nextSession?.location || data.meeting?.location) &&
-                    (data.nextSession?.country_name || data.meeting?.country_name)
-                      ? `${data.nextSession?.location || data.meeting?.location}, ${
-                          data.nextSession?.country_name || data.meeting?.country_name
+                    (session?.location || meeting?.location) &&
+                    (session?.country_name || meeting?.country_name)
+                      ? `${session?.location || meeting?.location}, ${
+                          session?.country_name || meeting?.country_name
                         }`
-                      : data.nextSession?.location ||
-                        data.meeting?.location ||
-                        data.nextSession?.country_name ||
-                        data.meeting?.country_name
+                      : session?.location ||
+                        meeting?.location ||
+                        session?.country_name ||
+                        meeting?.country_name
                   }
                 />
                 <InfoRow
                   label="GMT Offset"
-                  value={data.nextSession?.gmt_offset || data.meeting?.gmt_offset}
+                  value={session?.gmt_offset || meeting?.gmt_offset}
                 />
               </div>
 
               <div>
-                {data.meeting?.country_flag && (
+                {meeting?.country_flag && (
                   <img
-                    src={data.meeting.country_flag}
-                    alt={data.meeting.country_name || "Flag"}
+                    src={meeting.country_flag}
+                    alt={meeting.country_name || "Flag"}
                     style={{
                       width: 72,
                       height: 48,
@@ -719,7 +757,7 @@ console.log("NEXT SESSION:", j.nextSession);
                   />
                 )}
 
-                {data.meeting?.circuit_image ? (
+                {meeting?.circuit_image ? (
                   <div
                     style={{
                       border: "1px solid rgba(0,0,0,0.08)",
@@ -729,8 +767,8 @@ console.log("NEXT SESSION:", j.nextSession);
                     }}
                   >
                     <img
-                      src={data.meeting.circuit_image}
-                      alt={data.meeting.circuit_short_name || "Circuit"}
+                      src={meeting.circuit_image}
+                      alt={meeting.circuit_short_name || "Circuit"}
                       style={{
                         width: "100%",
                         maxWidth: 420,
@@ -789,7 +827,7 @@ console.log("NEXT SESSION:", j.nextSession);
           <div style={{ minWidth: 0 }}>
             <TrackMap
               points={trackPoints}
-              circuitName={data?.meeting?.circuit_short_name}
+              circuitName={resolvedCircuitName}
               selectedDriverNumber={selectedDriverNumber}
               onSelectDriver={setSelectedDriverNumber}
               driversMap={driversMap}

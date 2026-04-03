@@ -67,6 +67,7 @@ export default function RealTime() {
   
 
   const [trackMeta, setTrackMeta] = useState(null);
+  const [towerGapMode, setTowerGapMode] = useState("interval");
 
 
   const resolvedCircuitName =
@@ -417,6 +418,8 @@ export default function RealTime() {
               selectedDriverNumber={selectedDriverNumber}
               onSelectDriver={setSelectedDriverNumber}
               driversMap={driversMap}
+              gapMode={towerGapMode}
+              onChangeGapMode={setTowerGapMode}
             />
           </div>
 
@@ -821,6 +824,8 @@ export default function RealTime() {
               selectedDriverNumber={selectedDriverNumber}
               onSelectDriver={setSelectedDriverNumber}
               driversMap={driversMap}
+              gapMode={towerGapMode}
+              onChangeGapMode={setTowerGapMode}
             />
           </div>
 

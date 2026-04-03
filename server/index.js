@@ -1143,17 +1143,18 @@ router.get("/realtime/position-tower", async (req, res) => {
     const status = getOpenF1LiveStatus();
 
     const rows = live.position || [];
+    const intervalRows = live.intervals || [];
 
-    // poslednji zapis po vozaču
     const latestByDriver = new Map();
+    const latestIntervalsByDriver = new Map();
 
+    // poslednji position zapis po vozaču
     for (const row of rows) {
       const driverNumber = Number(row.driver_number);
       if (!driverNumber) continue;
 
       const prev = latestByDriver.get(driverNumber);
 
-      // koristi _id ako postoji, inače date
       const currentRank = Number(row._id || 0);
       const prevRank = Number(prev?._id || 0);
 
@@ -1162,14 +1163,36 @@ router.get("/realtime/position-tower", async (req, res) => {
       }
     }
 
+    // poslednji intervals zapis po vozaču
+    for (const row of intervalRows) {
+      const driverNumber = Number(row.driver_number);
+      if (!driverNumber) continue;
+
+      const prev = latestIntervalsByDriver.get(driverNumber);
+
+      const currentRank = Number(row._id || 0);
+      const prevRank = Number(prev?._id || 0);
+
+      if (!prev || currentRank >= prevRank) {
+        latestIntervalsByDriver.set(driverNumber, row);
+      }
+    }
+
     const tower = Array.from(latestByDriver.values())
-      .map((row) => ({
-        driver_number: row.driver_number,
-        position: row.position ?? row.position_order ?? null,
-        date: row.date || null,
-        meeting_key: row.meeting_key || null,
-        session_key: row.session_key || null,
-      }))
+      .map((row) => {
+        const driverNumber = Number(row.driver_number);
+        const interval = latestIntervalsByDriver.get(driverNumber);
+
+        return {
+          driver_number: row.driver_number,
+          position: row.position ?? row.position_order ?? null,
+          date: row.date || null,
+          meeting_key: row.meeting_key || null,
+          session_key: row.session_key || null,
+          gap_to_leader: interval?.gap_to_leader ?? null,
+          interval_to_ahead: interval?.interval ?? null,
+        };
+      })
       .filter((row) => row.position != null)
       .sort((a, b) => Number(a.position) - Number(b.position));
 
@@ -1683,5 +1706,42 @@ router.get("/realtime/drivers", async (req, res) => {
     });
   } catch (err) {
     return res.status(500).json({ ok: false });
+  }
+});
+
+
+
+
+
+router.get("/realtime/test-telemetry-intervals", async (req, res) => {
+  try {
+    const resp = await axios.get("https://mqtt.telemetry.zone/v1/intervals", {
+      headers: {
+        "x-api-key": process.env.TELEMETRY_API_KEY,
+      },
+      params: {
+        session_key: req.query.session_key,
+      },
+      timeout: 4000,
+      maxRedirects: 0,
+      validateStatus: () => true,
+    });
+
+    return res.json({
+      ok: true,
+      status: resp.status,
+      contentType: resp.headers["content-type"] || null,
+      data:
+        typeof resp.data === "string"
+          ? resp.data.slice(0, 500)
+          : resp.data,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      ok: false,
+      error: err.message,
+      status: err.response?.status || null,
+      data: err.response?.data || null,
+    });
   }
 });

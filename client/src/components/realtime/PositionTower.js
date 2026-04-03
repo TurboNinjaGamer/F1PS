@@ -28,6 +28,8 @@ export default function PositionTower({
   gapMode = "interval",
   onChangeGapMode,
   towerMode = "race",
+  currentLap = null,
+  totalLaps = null,
 }) {
   const isQualyMode = towerMode === "qualy";
 
@@ -52,7 +54,29 @@ export default function PositionTower({
           marginBottom: 6,
         }}
       >
-        <h3 style={{ margin: 0 }}>Position Tower</h3>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            flexWrap: "wrap",
+          }}
+        >
+          {towerMode === "race" && currentLap != null && (
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 800,
+                padding: "4px 10px",
+                borderRadius: 999,
+                background: "#f3f3f3",
+                border: "1px solid rgba(0,0,0,0.08)",
+              }}
+            >
+              {totalLaps != null ? `${currentLap}/${totalLaps}` : `Lap ${currentLap}`}
+            </div>
+          )}
+        </div>
 
         <div
           style={{
@@ -157,7 +181,6 @@ export default function PositionTower({
             const isLeader = Number(row.position) === 1;
 
             let mainValue = "—";
-            let subLabel = "";
 
             if (!isQualyMode) {
               const gapValue =
@@ -166,16 +189,13 @@ export default function PositionTower({
                   : row.interval_to_ahead;
 
               mainValue = formatGap(gapValue, isLeader, gapMode);
-              subLabel = gapMode === "to-leader" ? "to leader" : "interval";
             } else {
               if (gapMode === "best-lap") {
                 mainValue = formatLapTime(row.best_lap_time);
-                subLabel = `lap ${row.best_lap_number ?? "—"}`;
               } else {
                 mainValue = isLeader
                   ? formatLapTime(row.best_lap_time)
                   : formatGap(row.gap_to_fastest, false, "gap");
-                subLabel = isLeader ? "fastest" : "to fastest";
               }
             }
 
@@ -220,31 +240,17 @@ export default function PositionTower({
                   <div style={{ fontWeight: 800 }}>
                     {getDriverCode(row.driver_number)}
                   </div>
-                  <div style={{ fontSize: 11, opacity: 0.6 }}>
-                    #{row.driver_number}
-                  </div>
                 </div>
 
-                <div style={{ textAlign: "right" }}>
-                  <div
-                    style={{
-                      fontWeight: 700,
-                      fontSize: 13,
-                      opacity: 0.9,
-                    }}
-                  >
-                    {mainValue}
-                  </div>
-
-                  <div
-                    style={{
-                      fontSize: 10,
-                      opacity: 0.5,
-                      marginTop: 2,
-                    }}
-                  >
-                    {subLabel}
-                  </div>
+                <div
+                  style={{
+                    textAlign: "right",
+                    fontWeight: 700,
+                    fontSize: 13,
+                    opacity: 0.9,
+                  }}
+                >
+                  {mainValue}
                 </div>
               </div>
             );

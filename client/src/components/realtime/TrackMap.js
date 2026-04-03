@@ -132,9 +132,7 @@ if (!fileName) {
         minHeight: 500,
       }}
     >
-      <h3 style={{ marginTop: 0 }}>
-        Track Map{circuitName ? ` · ${circuitName}` : ""}
-      </h3>
+      <div style={{ height: 8 }} />
 
       {trackError && (
         <div style={{ color: "#c62828", opacity: 0.9, marginBottom: 12 }}>

@@ -1193,12 +1193,33 @@ router.get("/realtime/position-tower", async (req, res) => {
     const intervalRows = live.intervals || [];
     const lapRows = live.laps || [];
 
-    console.log("LIVE STATUS:", status);
-    console.log("POSITION COUNT:", positionRows.length);
-    console.log("INTERVALS COUNT:", intervalRows.length);
-    console.log("LAPS COUNT:", lapRows.length);
-    console.log("INTERVAL SAMPLE:", intervalRows[0]);
-    console.log("LAP SAMPLE:", lapRows[0]);
+let maxCompletedLap = null;
+let totalLaps = null;
+
+console.log("LAPS COUNT:", lapRows.length);
+console.log("LAP SAMPLE 1:", lapRows[0]);
+console.log("LAP SAMPLE 2:", lapRows[1]);
+console.log("LAP SAMPLE 3:", lapRows[2]);
+
+for (const row of lapRows) {
+  const lapNumber = Number(row.lap_number);
+  if (Number.isFinite(lapNumber) && lapNumber > 0) {
+    maxCompletedLap = Math.max(maxCompletedLap || 0, lapNumber);
+  }
+
+  const lapsTotal =
+    Number(row.total_laps) ||
+    Number(row.number_of_laps) ||
+    Number(row.total_race_laps);
+
+  if (Number.isFinite(lapsTotal) && lapsTotal > 0) {
+    totalLaps = Math.max(totalLaps || 0, lapsTotal);
+  }
+}
+
+const currentLap = maxCompletedLap != null ? maxCompletedLap + 1 : null;
+
+
 
     // QUALY / PRACTICE STYLE:
     // Ako nema intervalsa, ali ima lapova, pravimo tower po best lap vremenu.
@@ -1268,6 +1289,8 @@ router.get("/realtime/position-tower", async (req, res) => {
       connected: status.connected,
       mode: "race",
       count: tower.length,
+      current_lap: currentLap,
+      total_laps: totalLaps,
       tower,
     });
   } catch (err) {

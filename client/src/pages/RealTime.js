@@ -69,6 +69,8 @@ export default function RealTime() {
   const [trackMeta, setTrackMeta] = useState(null);
   const [towerGapMode, setTowerGapMode] = useState("interval");
 
+  const [towerMode, setTowerMode] = useState("race");
+
 
   const resolvedCircuitName =
   trackMeta?.meeting?.circuit_short_name ||
@@ -282,8 +284,16 @@ export default function RealTime() {
         .then((r) => r.json())
         .then((j) => {
           if (!cancelled && j.ok) {
-            setTowerData(j.tower || []);
-          }
+  setTowerData(j.tower || []);
+  setTowerMode(j.mode || "race");
+
+  setTowerGapMode((prev) => {
+    if ((j.mode || "race") === "qualy") {
+      return prev === "interval" || prev === "to-leader" ? "gap" : prev;
+    }
+    return prev === "gap" || prev === "best-lap" ? "interval" : prev;
+  });
+}
         })
         .catch(() => {});
     };
@@ -420,6 +430,7 @@ export default function RealTime() {
               driversMap={driversMap}
               gapMode={towerGapMode}
               onChangeGapMode={setTowerGapMode}
+              towerMode={towerMode}
             />
           </div>
 
@@ -826,6 +837,7 @@ export default function RealTime() {
               driversMap={driversMap}
               gapMode={towerGapMode}
               onChangeGapMode={setTowerGapMode}
+              towerMode={towerMode}
             />
           </div>
 

@@ -1137,39 +1137,106 @@ router.get("/realtime/status", async (req, res) => {
 
 
 
+function buildQualyTowerFromLaps(lapRows = []) {
+  const bestLapByDriver = new Map();
+
+  for (const row of lapRows) {
+    const driverNumber = Number(row.driver_number);
+    const lapNumber = Number(row.lap_number);
+    const lapDuration = Number(row.lap_duration);
+
+    if (!driverNumber) continue;
+    if (!lapNumber) continue;
+    if (!Number.isFinite(lapDuration) || lapDuration <= 0) continue;
+
+    const prev = bestLapByDriver.get(driverNumber);
+
+    const currentLap = {
+      driver_number: driverNumber,
+      best_lap_time: lapDuration,
+      best_lap_number: lapNumber,
+      date: row.date || null,
+      meeting_key: row.meeting_key || null,
+      session_key: row.session_key || null,
+    };
+
+    if (!prev || lapDuration < prev.best_lap_time) {
+      bestLapByDriver.set(driverNumber, currentLap);
+    }
+  }
+
+  const sorted = Array.from(bestLapByDriver.values()).sort(
+    (a, b) => a.best_lap_time - b.best_lap_time
+  );
+
+  const fastest = sorted[0]?.best_lap_time ?? null;
+
+  return sorted.map((row, index) => ({
+    driver_number: row.driver_number,
+    position: index + 1,
+    date: row.date,
+    meeting_key: row.meeting_key,
+    session_key: row.session_key,
+    best_lap_time: row.best_lap_time,
+    best_lap_number: row.best_lap_number,
+    gap_to_fastest:
+      fastest != null ? row.best_lap_time - fastest : null,
+  }));
+}
+
 router.get("/realtime/position-tower", async (req, res) => {
   try {
     const live = getOpenF1LatestMessages();
     const status = getOpenF1LiveStatus();
 
-    const rows = live.position || [];
+    const positionRows = live.position || [];
     const intervalRows = live.intervals || [];
+    const lapRows = live.laps || [];
 
-    const latestByDriver = new Map();
+    console.log("LIVE STATUS:", status);
+    console.log("POSITION COUNT:", positionRows.length);
+    console.log("INTERVALS COUNT:", intervalRows.length);
+    console.log("LAPS COUNT:", lapRows.length);
+    console.log("INTERVAL SAMPLE:", intervalRows[0]);
+    console.log("LAP SAMPLE:", lapRows[0]);
+
+    // QUALY / PRACTICE STYLE:
+    // Ako nema intervalsa, ali ima lapova, pravimo tower po best lap vremenu.
+    if (!intervalRows.length && lapRows.length) {
+      const tower = buildQualyTowerFromLaps(lapRows);
+
+      return res.json({
+        ok: true,
+        connected: status.connected,
+        mode: "qualy",
+        count: tower.length,
+        tower,
+      });
+    }
+
+    // RACE STYLE:
+    // position + intervals
+    const latestPositionByDriver = new Map();
     const latestIntervalsByDriver = new Map();
 
-    // poslednji position zapis po vozaču
-    for (const row of rows) {
+    for (const row of positionRows) {
       const driverNumber = Number(row.driver_number);
       if (!driverNumber) continue;
 
-      const prev = latestByDriver.get(driverNumber);
-
+      const prev = latestPositionByDriver.get(driverNumber);
       const currentRank = Number(row._id || 0);
       const prevRank = Number(prev?._id || 0);
 
       if (!prev || currentRank >= prevRank) {
-        latestByDriver.set(driverNumber, row);
+        latestPositionByDriver.set(driverNumber, row);
       }
     }
 
-    // poslednji intervals zapis po vozaču
     for (const row of intervalRows) {
       const driverNumber = Number(row.driver_number);
       if (!driverNumber) continue;
 
       const prev = latestIntervalsByDriver.get(driverNumber);
-
       const currentRank = Number(row._id || 0);
       const prevRank = Number(prev?._id || 0);
 
@@ -1178,7 +1245,7 @@ router.get("/realtime/position-tower", async (req, res) => {
       }
     }
 
-    const tower = Array.from(latestByDriver.values())
+    const tower = Array.from(latestPositionByDriver.values())
       .map((row) => {
         const driverNumber = Number(row.driver_number);
         const interval = latestIntervalsByDriver.get(driverNumber);
@@ -1199,6 +1266,7 @@ router.get("/realtime/position-tower", async (req, res) => {
     return res.json({
       ok: true,
       connected: status.connected,
+      mode: "race",
       count: tower.length,
       tower,
     });

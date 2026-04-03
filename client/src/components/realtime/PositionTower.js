@@ -1,4 +1,4 @@
-import { getDriverCode } from "../../utils/realtimeHelpers";
+import { getDriverCode, formatLapTime } from "../../utils/realtimeHelpers";
 
 function formatGap(value, isLeader = false, mode = "interval") {
   if (isLeader) {
@@ -27,7 +27,10 @@ export default function PositionTower({
   driversMap,
   gapMode = "interval",
   onChangeGapMode,
+  towerMode = "race",
 }) {
+  const isQualyMode = towerMode === "qualy";
+
   return (
     <div
       style={{
@@ -60,35 +63,73 @@ export default function PositionTower({
             background: "#f3f3f3",
           }}
         >
-          <button
-            onClick={() => onChangeGapMode?.("interval")}
-            style={{
-              padding: "6px 10px",
-              border: "none",
-              background: gapMode === "interval" ? "#151922" : "transparent",
-              color: gapMode === "interval" ? "#ffffff" : "#111111",
-              cursor: "pointer",
-              fontWeight: 700,
-              fontSize: 12,
-            }}
-          >
-            Interval
-          </button>
+          {!isQualyMode && (
+            <>
+              <button
+                onClick={() => onChangeGapMode?.("interval")}
+                style={{
+                  padding: "6px 10px",
+                  border: "none",
+                  background: gapMode === "interval" ? "#151922" : "transparent",
+                  color: gapMode === "interval" ? "#ffffff" : "#111111",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  fontSize: 12,
+                }}
+              >
+                Interval
+              </button>
 
-          <button
-            onClick={() => onChangeGapMode?.("to-leader")}
-            style={{
-              padding: "6px 10px",
-              border: "none",
-              background: gapMode === "to-leader" ? "#151922" : "transparent",
-              color: gapMode === "to-leader" ? "#ffffff" : "#111111",
-              cursor: "pointer",
-              fontWeight: 700,
-              fontSize: 12,
-            }}
-          >
-            To Leader
-          </button>
+              <button
+                onClick={() => onChangeGapMode?.("to-leader")}
+                style={{
+                  padding: "6px 10px",
+                  border: "none",
+                  background: gapMode === "to-leader" ? "#151922" : "transparent",
+                  color: gapMode === "to-leader" ? "#ffffff" : "#111111",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  fontSize: 12,
+                }}
+              >
+                To Leader
+              </button>
+            </>
+          )}
+
+          {isQualyMode && (
+            <>
+              <button
+                onClick={() => onChangeGapMode?.("gap")}
+                style={{
+                  padding: "6px 10px",
+                  border: "none",
+                  background: gapMode === "gap" ? "#151922" : "transparent",
+                  color: gapMode === "gap" ? "#ffffff" : "#111111",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  fontSize: 12,
+                }}
+              >
+                Gap
+              </button>
+
+              <button
+                onClick={() => onChangeGapMode?.("best-lap")}
+                style={{
+                  padding: "6px 10px",
+                  border: "none",
+                  background: gapMode === "best-lap" ? "#151922" : "transparent",
+                  color: gapMode === "best-lap" ? "#ffffff" : "#111111",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  fontSize: 12,
+                }}
+              >
+                Best Lap
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -115,10 +156,28 @@ export default function PositionTower({
 
             const isLeader = Number(row.position) === 1;
 
-            const gapValue =
-              gapMode === "to-leader"
-                ? row.gap_to_leader
-                : row.interval_to_ahead;
+            let mainValue = "—";
+            let subLabel = "";
+
+            if (!isQualyMode) {
+              const gapValue =
+                gapMode === "to-leader"
+                  ? row.gap_to_leader
+                  : row.interval_to_ahead;
+
+              mainValue = formatGap(gapValue, isLeader, gapMode);
+              subLabel = gapMode === "to-leader" ? "to leader" : "interval";
+            } else {
+              if (gapMode === "best-lap") {
+                mainValue = formatLapTime(row.best_lap_time);
+                subLabel = `lap ${row.best_lap_number ?? "—"}`;
+              } else {
+                mainValue = isLeader
+                  ? formatLapTime(row.best_lap_time)
+                  : formatGap(row.gap_to_fastest, false, "gap");
+                subLabel = isLeader ? "fastest" : "to fastest";
+              }
+            }
 
             return (
               <div
@@ -126,7 +185,7 @@ export default function PositionTower({
                 onClick={() => onSelectDriver?.(row.driver_number)}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "6px 44px 1fr 100px",
+                  gridTemplateColumns: "6px 44px 1fr 110px",
                   alignItems: "center",
                   gap: 10,
                   padding: "10px 12px",
@@ -174,7 +233,7 @@ export default function PositionTower({
                       opacity: 0.9,
                     }}
                   >
-                    {formatGap(gapValue, isLeader, gapMode)}
+                    {mainValue}
                   </div>
 
                   <div
@@ -184,7 +243,7 @@ export default function PositionTower({
                       marginTop: 2,
                     }}
                   >
-                    {gapMode === "to-leader" ? "to leader" : "interval"}
+                    {subLabel}
                   </div>
                 </div>
               </div>

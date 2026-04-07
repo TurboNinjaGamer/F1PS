@@ -1184,6 +1184,67 @@ function buildQualyTowerFromLaps(lapRows = []) {
   }));
 }
 
+const lapTimelineCache = new Map();
+
+async function getLapTimelineForSession(sessionKey) {
+  if (!sessionKey) return [];
+
+  const cacheKey = String(sessionKey);
+  const cached = lapTimelineCache.get(cacheKey);
+  if (cached) return cached;
+
+  const resp = await openf1Get("https://api.openf1.org/v1/laps", {
+    params: { session_key: sessionKey },
+  });
+
+  const rows = resp.data || [];
+
+  const timeline = rows
+    .map((row) => ({
+      driver_number: Number(row.driver_number),
+      lap_number: Number(row.lap_number),
+      date: row.date ? new Date(row.date).getTime() : null,
+    }))
+    .filter(
+      (row) =>
+        Number.isFinite(row.driver_number) &&
+        Number.isFinite(row.lap_number) &&
+        row.lap_number > 0 &&
+        Number.isFinite(row.date)
+    )
+    .sort((a, b) => a.date - b.date);
+
+  lapTimelineCache.set(cacheKey, timeline);
+  return timeline;
+}
+
+function resolveCurrentLapFromTimeline(positionRows, lapTimeline) {
+  if (!positionRows?.length || !lapTimeline?.length) return null;
+
+  let latestReplayTs = null;
+
+  for (const row of positionRows) {
+    const ts = row?.date ? new Date(row.date).getTime() : null;
+    if (Number.isFinite(ts)) {
+      latestReplayTs = Math.max(latestReplayTs || 0, ts);
+    }
+  }
+
+  if (!Number.isFinite(latestReplayTs)) return null;
+
+  let bestLap = null;
+
+  for (const item of lapTimeline) {
+    if (item.date <= latestReplayTs) {
+      bestLap = Math.max(bestLap || 0, item.lap_number);
+    } else {
+      break;
+    }
+  }
+
+  return bestLap;
+}
+
 router.get("/realtime/position-tower", async (req, res) => {
   try {
     const live = getOpenF1LatestMessages();
@@ -1193,36 +1254,111 @@ router.get("/realtime/position-tower", async (req, res) => {
     const intervalRows = live.intervals || [];
     const lapRows = live.laps || [];
 
-let maxCompletedLap = null;
-let totalLaps = null;
+    let maxCompletedLap = null;
+    let totalLaps = null;
 
-console.log("LAPS COUNT:", lapRows.length);
-console.log("LAP SAMPLE 1:", lapRows[0]);
-console.log("LAP SAMPLE 2:", lapRows[1]);
-console.log("LAP SAMPLE 3:", lapRows[2]);
+    // 1) direktno iz live laps
+    for (const row of lapRows) {
+      const lapNumber = Number(row.lap_number);
 
-for (const row of lapRows) {
-  const lapNumber = Number(row.lap_number);
-  if (Number.isFinite(lapNumber) && lapNumber > 0) {
-    maxCompletedLap = Math.max(maxCompletedLap || 0, lapNumber);
-  }
+      if (Number.isFinite(lapNumber) && lapNumber > 0) {
+        maxCompletedLap = Math.max(maxCompletedLap || 0, lapNumber);
+      }
 
-  const lapsTotal =
-    Number(row.total_laps) ||
-    Number(row.number_of_laps) ||
-    Number(row.total_race_laps);
+      const lapsTotal =
+        Number(row.total_laps) ||
+        Number(row.number_of_laps) ||
+        Number(row.total_race_laps);
 
-  if (Number.isFinite(lapsTotal) && lapsTotal > 0) {
-    totalLaps = Math.max(totalLaps || 0, lapsTotal);
-  }
-}
+      if (Number.isFinite(lapsTotal) && lapsTotal > 0) {
+        totalLaps = Math.max(totalLaps || 0, lapsTotal);
+      }
+    }
 
-const currentLap = maxCompletedLap != null ? maxCompletedLap + 1 : null;
+    // 2) fallback iz position polja
+    if (maxCompletedLap == null && positionRows.length) {
+      for (const row of positionRows) {
+        const lapNumber =
+          Number(row.lap_number) ||
+          Number(row.current_lap) ||
+          Number(row.lap);
 
+        if (Number.isFinite(lapNumber) && lapNumber > 0) {
+          maxCompletedLap = Math.max(maxCompletedLap || 0, lapNumber);
+        }
+      }
+    }
 
+    // 3) fallback iz timeline-a po datumu + session_key iz telemetry statusa
+    if (maxCompletedLap == null && positionRows.length) {
+      let sampleSessionKey = Number(
+        positionRows[0]?.session_key ||
+          positionRows.find((r) => r?.session_key)?.session_key
+      );
 
-    // QUALY / PRACTICE STYLE:
-    // Ako nema intervalsa, ali ima lapova, pravimo tower po best lap vremenu.
+      // ako ga nema u MQTT position porukama, probaj telemetry status
+      if (!Number.isFinite(sampleSessionKey) || sampleSessionKey <= 0) {
+        try {
+          const telemetry = await getTelemetryStatusSnapshot();
+
+          sampleSessionKey = Number(
+            telemetry?.session?.session_key ||
+              telemetry?.session?.key ||
+              telemetry?.replay?.session_key ||
+              telemetry?.replay?.key
+          );
+        } catch (e) {
+          console.warn("Telemetry status fetch failed in position-tower:", e.message);
+        }
+      }
+
+      console.log("POSITION ROWS:", positionRows.length);
+      console.log("LAP ROWS:", lapRows.length);
+      console.log("SAMPLE SESSION KEY:", sampleSessionKey);
+      console.log("POSITION SAMPLE:", positionRows[0]);
+
+      if (Number.isFinite(sampleSessionKey) && sampleSessionKey > 0) {
+        const lapTimeline = await getLapTimelineForSession(sampleSessionKey);
+
+        let latestReplayTs = null;
+        for (const row of positionRows) {
+          const ts = row?.date ? new Date(row.date).getTime() : null;
+          if (Number.isFinite(ts)) {
+            latestReplayTs = Math.max(latestReplayTs || 0, ts);
+          }
+        }
+
+        console.log("LAP TIMELINE SIZE:", lapTimeline.length);
+        console.log("LATEST REPLAY TS:", latestReplayTs);
+        console.log("FIRST TIMELINE ITEM:", lapTimeline[0]);
+        console.log("LAST TIMELINE ITEM:", lapTimeline[lapTimeline.length - 1]);
+
+        if (Number.isFinite(latestReplayTs) && lapTimeline.length) {
+          for (const item of lapTimeline) {
+            if (item.date <= latestReplayTs) {
+              maxCompletedLap = Math.max(
+                maxCompletedLap || 0,
+                Number(item.lap_number) || 0
+              );
+            } else {
+              break;
+            }
+          }
+
+          if (!totalLaps) {
+            totalLaps =
+              lapTimeline.reduce(
+                (max, row) => Math.max(max, Number(row.lap_number) || 0),
+                0
+              ) || null;
+          }
+        }
+      }
+    }
+
+    const currentLap = maxCompletedLap != null ? maxCompletedLap : null;
+
+    // QUALY MODE
     if (!intervalRows.length && lapRows.length) {
       const tower = buildQualyTowerFromLaps(lapRows);
 
@@ -1231,12 +1367,13 @@ const currentLap = maxCompletedLap != null ? maxCompletedLap + 1 : null;
         connected: status.connected,
         mode: "qualy",
         count: tower.length,
+        current_lap: currentLap,
+        total_laps: totalLaps,
         tower,
       });
     }
 
-    // RACE STYLE:
-    // position + intervals
+    // RACE MODE
     const latestPositionByDriver = new Map();
     const latestIntervalsByDriver = new Map();
 
@@ -1417,6 +1554,7 @@ router.get("/realtime/track-map", async (req, res) => {
     const status = getOpenF1LiveStatus();
 
     const rows = live.location || [];
+    const raceControlRows = live.race_control || [];
     const latestByDriver = new Map();
 
     for (const row of rows) {
@@ -1472,6 +1610,76 @@ router.get("/realtime/track-map", async (req, res) => {
       }
     }
 
+    function getRaceControlTimestamp(row) {
+  const raw =
+    row?.date ||
+    row?.date_time ||
+    row?.timestamp ||
+    row?.issued_at ||
+    null;
+
+  const ts = raw ? new Date(raw).getTime() : null;
+  return Number.isFinite(ts) ? ts : null;
+}
+
+function isRelevantRaceControl(row) {
+  const msg = String(
+    row?.message ||
+      row?.race_control_message ||
+      row?.category ||
+      row?.flag ||
+      ""
+  ).toLowerCase();
+
+  return (
+    msg.includes("safety car") ||
+    msg.includes("yellow") ||
+    msg.includes("red flag") ||
+    msg.includes("green flag") ||
+    msg.includes("virtual safety car") ||
+    msg.includes("vsc") ||
+    msg.includes("double yellow") ||
+    msg.includes("checkered") ||
+    msg.includes("clear")
+  );
+}
+
+let latestRaceControl = null;
+
+if (raceControlRows.length) {
+  let currentReplayTs = null;
+
+  for (const p of points) {
+    const ts = p?.date ? new Date(p.date).getTime() : null;
+    if (Number.isFinite(ts)) {
+      currentReplayTs = Math.max(currentReplayTs || 0, ts);
+    }
+  }
+
+  const relevantOverall = raceControlRows
+    .filter(isRelevantRaceControl)
+    .sort((a, b) => {
+      const aTime = getRaceControlTimestamp(a) || 0;
+      const bTime = getRaceControlTimestamp(b) || 0;
+      return bTime - aTime;
+    });
+
+  const relevantForReplay = relevantOverall.filter((row) => {
+    const ts = getRaceControlTimestamp(row);
+    if (!Number.isFinite(ts)) return false;
+    if (!Number.isFinite(currentReplayTs)) return false;
+    return ts <= currentReplayTs;
+  });
+
+  latestRaceControl = relevantForReplay[0] || relevantOverall[0] || null;
+
+  console.log("TRACK MAP currentReplayTs:", currentReplayTs);
+  console.log("TRACK MAP raceControl sample:", raceControlRows[0]);
+  console.log("TRACK MAP relevantOverall count:", relevantOverall.length);
+  console.log("TRACK MAP relevantForReplay count:", relevantForReplay.length);
+  console.log("TRACK MAP latestRaceControl:", latestRaceControl);
+}
+
     return res.json({
       ok: true,
       connected: status.connected,
@@ -1481,6 +1689,24 @@ router.get("/realtime/track-map", async (req, res) => {
       session_key: sampleRow?.session_key || null,
       meeting,
       liveSession,
+      raceControl: latestRaceControl
+        ? {
+            message:
+              latestRaceControl.message ||
+              latestRaceControl.race_control_message ||
+              latestRaceControl.category ||
+              null,
+            flag:
+              latestRaceControl.flag ||
+              latestRaceControl.category ||
+              null,
+            scope:
+              latestRaceControl.scope ||
+              latestRaceControl.sector ||
+              null,
+            date: latestRaceControl.date || null,
+          }
+        : null,
     });
   } catch (err) {
     console.error("==== TRACK MAP ERROR ====");

@@ -16,11 +16,15 @@ function resolveTrackFile(circuitName, previousFileName) {
     return "Shanghai.svg";
   }
 
-  if(name.includes("australia") || name.includes("melbourne") || name.includes("australian grand prix")){
+  if (
+    name.includes("australia") ||
+    name.includes("melbourne") ||
+    name.includes("australian grand prix")
+  ) {
     return "Melbourne.svg";
   }
 
-  return previousFileName || null
+  return previousFileName || null;
 }
 
 function parseSvgTrack(svgText) {
@@ -59,12 +63,58 @@ function parseSvgTrack(svgText) {
   };
 }
 
+function getRaceControlStyle(raceControl) {
+  const text = String(
+    raceControl?.message || raceControl?.flag || ""
+  ).toLowerCase();
+
+  if (text.includes("red")) {
+    return {
+      bg: "#fdecec",
+      border: "#f5c2c7",
+      color: "#b42318",
+    };
+  }
+
+  if (
+    text.includes("yellow") ||
+    text.includes("safety car") ||
+    text.includes("vsc")
+  ) {
+    return {
+      bg: "#fff7d6",
+      border: "#f2d675",
+      color: "#8a6d00",
+    };
+  }
+
+  if (text.includes("green") || text.includes("clear")) {
+  return {
+    bg: "#e8f7ec",
+    border: "#9fd5ac",
+    color: "#1f7a3d",
+  };
+}
+
+  return {
+    bg: "#eef2f7",
+    border: "#cfd8e3",
+    color: "#334155",
+  };
+}
+
+function getRaceControlLabel(raceControl) {
+  if (!raceControl) return "";
+  return raceControl.message || raceControl.flag || "";
+}
+
 export default function TrackMap({
   points,
   circuitName,
   selectedDriverNumber,
   onSelectDriver,
   driversMap,
+  raceControl,
 }) {
   const [trackData, setTrackData] = useState(null);
   const [trackError, setTrackError] = useState(null);
@@ -76,13 +126,13 @@ export default function TrackMap({
     async function loadSvg() {
       setTrackError(null);
       setTrackData(null);
-      
 
       const fileName = resolveTrackFile(circuitName, lastResolvedFile);
 
-if (!fileName) {
-  return;
-}
+      if (!fileName) {
+        return;
+      }
+
       const trackUrl = `/tracks/${fileName}`;
 
       console.log("TrackMap circuitName =", circuitName);
@@ -117,9 +167,11 @@ if (!fileName) {
     return () => {
       cancelled = true;
     };
-  }, [circuitName]);
+  }, [circuitName, lastResolvedFile]);
 
   const viewBox = trackData?.viewBox;
+  const raceControlStyle = getRaceControlStyle(raceControl);
+  const raceControlLabel = getRaceControlLabel(raceControl);
 
   return (
     <div
@@ -132,7 +184,23 @@ if (!fileName) {
         minHeight: 500,
       }}
     >
-      <div style={{ height: 8 }} />
+      {raceControlLabel && (
+        <div
+          style={{
+            marginBottom: 12,
+            padding: "10px 12px",
+            borderRadius: 10,
+            border: `1px solid ${raceControlStyle.border}`,
+            background: raceControlStyle.bg,
+            color: raceControlStyle.color,
+            fontWeight: 800,
+            fontSize: 13,
+          }}
+        >
+          {raceControlLabel}
+          
+        </div>
+      )}
 
       {trackError && (
         <div style={{ color: "#c62828", opacity: 0.9, marginBottom: 12 }}>

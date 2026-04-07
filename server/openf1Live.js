@@ -10,6 +10,7 @@ const latestMessages = {
   laps: [],
   intervals: [],
   stints: [],
+  race_control: []
 };
 
 function safeJsonParse(str) {
@@ -33,6 +34,7 @@ function getBucketByTopic(topic) {
   if (topic === "v1/laps") return latestMessages.laps;
   if (topic === "v1/intervals") return latestMessages.intervals;
   if (topic === "v1/stints") return latestMessages.stints;
+  if (topic === "v1/race_control") return latestMessages.race_control;
   return null;
 }
 
@@ -67,6 +69,7 @@ async function connectOpenF1Live() {
         "v1/laps",
         "v1/intervals",
         "v1/stints",
+        "v1/race_control"
       ];
 
       for (const topic of topics) {

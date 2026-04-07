@@ -34,6 +34,8 @@ export default function RealTime() {
     totalLaps: null,
   });
 
+  const [trackRaceControl, setTrackRaceControl] = useState(null);
+
   const meeting = resolveMeeting(data);
   const session = resolveSession(data);
 
@@ -95,6 +97,7 @@ export default function RealTime() {
   meeting_key: j.meeting_key || prev?.meeting_key || null,
   session_key: j.session_key || prev?.session_key || null,
 }));
+setTrackRaceControl(j.raceControl || null);
           }
         })
         .catch(() => {});
@@ -124,6 +127,8 @@ export default function RealTime() {
       authFetch("/api/realtime/position-tower")
         .then((r) => r.json())
         .then((j) => {
+          console.log("tower response", j);
+          console.log("LAP FROM API:", j.current_lap);
           if (!cancelled && j.ok) {
             setTowerData(j.tower || []);
             setTowerMode(j.mode || "race");
@@ -145,7 +150,7 @@ export default function RealTime() {
             });
           }
 
-          console.log("tower response", j);
+          
         })
         .catch(() => {});
     };
@@ -218,6 +223,7 @@ export default function RealTime() {
             selectedDriverNumber={selectedDriverNumber}
             onSelectDriver={setSelectedDriverNumber}
             driversMap={driversMap}
+            raceControl={trackRaceControl}
           />
         </div>
       ) : null}
